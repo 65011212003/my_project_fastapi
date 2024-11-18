@@ -184,38 +184,80 @@
         // Load CSV data
         async function loadCSVData() {
             try {
-                const response = await fetch('rice_disease_analysis/rice_disease_pubmed_data.csv');
-                const csvText = await response.text();
-                const rows = csvText.split('\n');
-                const headers = rows[0].split(',');
+                const response = await fetch(`${API_URL}/csv-data`); // Changed to use API endpoint
+                const data = await response.json();
                 
                 let tableHTML = '<table><thead><tr>';
-                headers.forEach(header => {
+                data.headers.forEach(header => {
                     tableHTML += `<th>${header}</th>`;
                 });
                 tableHTML += '</tr></thead><tbody>';
 
-                for(let i = 1; i < Math.min(rows.length, 11); i++) { // Show first 10 rows
-                    const cells = rows[i].split(',');
+                data.rows.forEach(row => {
                     tableHTML += '<tr>';
-                    cells.forEach(cell => {
+                    row.forEach(cell => {
                         tableHTML += `<td>${cell}</td>`;
                     });
                     tableHTML += '</tr>';
-                }
+                });
+                
                 tableHTML += '</tbody></table>';
                 document.getElementById('csvData').innerHTML = tableHTML;
             } catch (error) {
                 console.error('Error loading CSV:', error);
+                document.getElementById('csvData').innerHTML = '<p class="text-red-500">Error loading data</p>';
             }
         }
 
         // Initialize map
         function initMap() {
-            map = L.map('map').setView([0, 0], 2);
+            map = L.map('map').setView([13.7563, 100.5018], 6); // Center on Thailand
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
+
+            // Add markers for rice disease locations in Thailand
+            const riceDiseasesThailand = [
+                {
+                    lat: 13.7563,
+                    lng: 100.5018,
+                    name: "Bangkok Region",
+                    disease: "Rice Blast Disease",
+                    info: "Common in central Thailand during rainy season"
+                },
+                {
+                    lat: 18.7883,
+                    lng: 98.9853,
+                    name: "Chiang Mai Region",
+                    disease: "Bacterial Leaf Blight",
+                    info: "Prevalent in northern Thailand"
+                },
+                {
+                    lat: 14.8799,
+                    lng: 102.0132,
+                    name: "Nakhon Ratchasima Region",
+                    disease: "Brown Spot Disease",
+                    info: "Affects northeastern rice fields"
+                },
+                {
+                    lat: 7.8804,
+                    lng: 98.3923,
+                    name: "Phuket Region",
+                    disease: "Sheath Blight",
+                    info: "Common in southern Thailand's humid climate"
+                }
+            ];
+
+            // Add markers to map
+            riceDiseasesThailand.forEach(location => {
+                L.marker([location.lat, location.lng])
+                    .addTo(map)
+                    .bindPopup(`
+                        <b>${location.name}</b><br>
+                        <b>Disease:</b> ${location.disease}<br>
+                        <b>Info:</b> ${location.info}
+                    `);
+            });
         }
 
         // Initialize chart

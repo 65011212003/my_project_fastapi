@@ -939,3 +939,23 @@ def get_lda_topics():
     with open(topics_path, "r") as f:
         topics = f.readlines()
     return [topic.strip() for topic in topics]
+
+@app.get("/csv-data")
+def get_csv_data():
+    """
+    Retrieve CSV data for display in the web interface.
+    """
+    data_path = "rice_disease_analysis/rice_disease_pubmed_data.csv"
+    if not os.path.exists(data_path):
+        raise HTTPException(status_code=404, detail="Data not found. Please run the analysis first.")
+
+    df = pd.read_csv(data_path)
+    
+    # Get headers and first 10 rows for display
+    headers = df.columns.tolist()
+    rows = df.head(10).values.tolist()
+    
+    return {
+        "headers": headers,
+        "rows": rows
+    }

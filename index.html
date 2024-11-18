@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,78 +8,207 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd/dist/antd.min.css">
     <script src="https://cdn.jsdelivr.net/npm/antd/dist/antd.min.js"></script>
-    <!-- Add Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Add Leaflet for maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-</head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-8">Rice Disease Analysis</h1>
+    <!-- Add custom fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <!-- Add custom styles -->
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
 
-        <!-- Status -->
-        <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">API Status</h2>
-            <div id="status" class="text-gray-600"></div>
+        .gradient-header {
+            background: linear-gradient(90deg, #4CAF50 0%, #2E7D32 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #4CAF50 0%, #2E7D32 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            border: none;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+        }
+
+        #map {
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .topic-tag {
+            background: linear-gradient(90deg, #81C784 0%, #4CAF50 100%);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .clustering-plot {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .csv-table {
+            width: 100%;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        .csv-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .csv-table th, .csv-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .csv-table th {
+            background-color: #4CAF50;
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen py-8">
+    <div class="container mx-auto px-4">
+        <div class="gradient-header mb-8">
+            <h1 class="text-4xl font-bold text-center">Rice Disease Analysis Platform</h1>
+            <p class="text-center mt-2 text-gray-100">Advanced Research Analysis Tool for Rice Diseases</p>
+        </div>
+
+        <!-- Clustering Plot Image -->
+        <div class="card p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">Clustering Analysis</h2>
+            <img src="rice_disease_analysis/clustering_plots.png" alt="Clustering Plot" class="clustering-plot">
+        </div>
+
+        <!-- CSV Data -->
+        <div class="card p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">Research Data</h2>
+            <div class="csv-table" id="csvData">
+                <!-- CSV data will be loaded here via JavaScript -->
+            </div>
+        </div>
+
+        <!-- Status Card -->
+        <div class="card p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">System Status</h2>
+            <div id="status" class="text-gray-700"></div>
         </div>
 
         <!-- Query Form -->
-        <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Search PubMed Articles</h2>
-            <form id="queryForm" class="space-y-4">
+        <div class="card p-8 mb-8">
+            <h2 class="text-2xl font-semibold mb-6 text-green-800">Research Query</h2>
+            <form id="queryForm" class="space-y-6">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Query</label>
-                    <input type="text" id="query" class="ant-input mt-1 block w-full" placeholder="e.g. rice blast disease" required>
+                    <label class="block text-lg font-medium text-gray-700 mb-2">Search Query</label>
+                    <input type="text" id="query" class="ant-input text-lg p-3 rounded-lg w-full"
+                        placeholder="Enter your research query (e.g., rice blast disease)" required>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Max Results</label>
-                    <input type="number" id="maxResults" class="ant-input mt-1 block w-full" value="1000" min="1" max="5000">
+                    <label class="block text-lg font-medium text-gray-700 mb-2">Maximum Results</label>
+                    <input type="number" id="maxResults" class="ant-input text-lg p-3 rounded-lg w-full" value="1000"
+                        min="1" max="5000">
                 </div>
-                <button type="submit" class="ant-btn ant-btn-primary">Analyze</button>
+                <button type="submit" class="btn-primary w-full text-lg font-semibold">Begin Analysis</button>
             </form>
         </div>
 
         <!-- Visualization Section -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <!-- Chart -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-semibold mb-4">Topic Distribution</h2>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">Topic Distribution</h2>
                 <canvas id="topicChart"></canvas>
             </div>
-            <!-- Map -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-semibold mb-4">Research Locations</h2>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">Global Research Map</h2>
                 <div id="map" style="height: 400px;"></div>
             </div>
         </div>
 
         <!-- Analysis Results -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Clusters -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-semibold mb-4">Clusters</h2>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-6 text-green-800">Research Clusters</h2>
                 <div id="clusters" class="space-y-4"></div>
             </div>
-
-            <!-- Topics -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-semibold mb-4">LDA Topics</h2>
-                <div id="topics" class="space-y-2"></div>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-6 text-green-800">Topic Analysis</h2>
+                <div id="topics" class="space-y-3"></div>
             </div>
         </div>
 
-        <!-- Articles -->
-        <div class="bg-white rounded-lg shadow p-6 mt-8">
-            <h2 class="text-xl font-semibold mb-4">Articles</h2>
-            <div id="articles" class="space-y-6"></div>
+        <!-- Articles Section -->
+        <div class="card p-8 mt-8">
+            <h2 class="text-2xl font-semibold mb-6 text-green-800">Research Articles</h2>
+            <div id="articles" class="space-y-8"></div>
         </div>
     </div>
 
     <script>
+        // [Previous JavaScript code remains the same]
         const API_URL = 'http://localhost:8000';
         let map;
         let topicChart;
+
+        // Load CSV data
+        async function loadCSVData() {
+            try {
+                const response = await fetch('rice_disease_analysis/rice_disease_pubmed_data.csv');
+                const csvText = await response.text();
+                const rows = csvText.split('\n');
+                const headers = rows[0].split(',');
+                
+                let tableHTML = '<table><thead><tr>';
+                headers.forEach(header => {
+                    tableHTML += `<th>${header}</th>`;
+                });
+                tableHTML += '</tr></thead><tbody>';
+
+                for(let i = 1; i < Math.min(rows.length, 11); i++) { // Show first 10 rows
+                    const cells = rows[i].split(',');
+                    tableHTML += '<tr>';
+                    cells.forEach(cell => {
+                        tableHTML += `<td>${cell}</td>`;
+                    });
+                    tableHTML += '</tr>';
+                }
+                tableHTML += '</tbody></table>';
+                document.getElementById('csvData').innerHTML = tableHTML;
+            } catch (error) {
+                console.error('Error loading CSV:', error);
+            }
+        }
 
         // Initialize map
         function initMap() {
@@ -151,7 +281,7 @@
                 });
                 const data = await response.json();
                 antd.message.success(data.message);
-                
+
                 const pollInterval = setInterval(async () => {
                     try {
                         await loadClusters();
@@ -173,7 +303,7 @@
             try {
                 const response = await fetch(`${API_URL}/clusters`);
                 const clusters = await response.json();
-                
+
                 // Update chart data
                 topicChart.data.labels = clusters.map(c => `Cluster ${c.cluster_number}`);
                 topicChart.data.datasets[0].data = clusters.map(c => c.article_count);
@@ -188,9 +318,9 @@
                         <div class="mt-2">
                             <p class="text-sm font-medium">Top Terms:</p>
                             <div class="flex flex-wrap gap-1 mt-1">
-                                ${cluster.top_terms.map(term => 
-                                    `<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">${term}</span>`
-                                ).join('')}
+                                ${cluster.top_terms.map(term =>
+                    `<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">${term}</span>`
+                ).join('')}
                             </div>
                         </div>
                     </div>
@@ -205,7 +335,7 @@
             try {
                 const response = await fetch(`${API_URL}/articles/${clusterId}`);
                 const articles = await response.json();
-                
+
                 // Clear existing markers
                 map.eachLayer((layer) => {
                     if (layer instanceof L.Marker) {
@@ -247,7 +377,7 @@
             try {
                 const response = await fetch(`${API_URL}/topics`);
                 const topics = await response.json();
-                
+
                 const topicsDiv = document.getElementById('topics');
                 topicsDiv.innerHTML = topics.map((topic, index) => `
                     <div class="p-3 bg-gray-50 rounded hover:shadow-md transition-shadow">
@@ -265,6 +395,9 @@
         checkStatus();
         loadClusters();
         loadTopics();
+        loadCSVData();
+
     </script>
 </body>
+
 </html>

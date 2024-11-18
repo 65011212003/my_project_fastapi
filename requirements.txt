@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+biopython
+pandas
+numpy
+scikit-learn
+nltk
+spacy
+gensim
+matplotlib
+seaborn
+python-dotenv

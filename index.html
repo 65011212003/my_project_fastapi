@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rice Disease Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd/dist/antd.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/antd/dist/antd.min.js"></script>
+    <!-- Add Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Add Leaflet for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Rice Disease Analysis</h1>
+
+        <!-- Status -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">API Status</h2>
+            <div id="status" class="text-gray-600"></div>
+        </div>
+
+        <!-- Query Form -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Search PubMed Articles</h2>
+            <form id="queryForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Query</label>
+                    <input type="text" id="query" class="ant-input mt-1 block w-full" placeholder="e.g. rice blast disease" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Max Results</label>
+                    <input type="number" id="maxResults" class="ant-input mt-1 block w-full" value="1000" min="1" max="5000">
+                </div>
+                <button type="submit" class="ant-btn ant-btn-primary">Analyze</button>
+            </form>
+        </div>
+
+        <!-- Visualization Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- Chart -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Topic Distribution</h2>
+                <canvas id="topicChart"></canvas>
+            </div>
+            <!-- Map -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Research Locations</h2>
+                <div id="map" style="height: 400px;"></div>
+            </div>
+        </div>
+
+        <!-- Analysis Results -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Clusters -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Clusters</h2>
+                <div id="clusters" class="space-y-4"></div>
+            </div>
+
+            <!-- Topics -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">LDA Topics</h2>
+                <div id="topics" class="space-y-2"></div>
+            </div>
+        </div>
+
+        <!-- Articles -->
+        <div class="bg-white rounded-lg shadow p-6 mt-8">
+            <h2 class="text-xl font-semibold mb-4">Articles</h2>
+            <div id="articles" class="space-y-6"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let map;
+        let topicChart;
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([0, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Initialize chart
+        function initChart() {
+            const ctx = document.getElementById('topicChart').getContext('2d');
+            topicChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            '#FF6384',
+                            '#36A2EB',
+                            '#FFCE56',
+                            '#4BC0C0',
+                            '#9966FF'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        }
+                    }
+                }
+            });
+        }
+
+        // Check API Status
+        async function checkStatus() {
+            try {
+                const response = await fetch(`${API_URL}/status`);
+                const status = await response.text();
+                document.getElementById('status').textContent = status;
+            } catch (error) {
+                document.getElementById('status').textContent = 'API is not responding';
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('queryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = document.getElementById('query').value;
+            const maxResults = document.getElementById('maxResults').value;
+
+            try {
+                const button = e.target.querySelector('button');
+                button.disabled = true;
+                button.textContent = 'Analyzing...';
+
+                const response = await fetch(`${API_URL}/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query,
+                        max_results: parseInt(maxResults)
+                    })
+                });
+                const data = await response.json();
+                antd.message.success(data.message);
+                
+                const pollInterval = setInterval(async () => {
+                    try {
+                        await loadClusters();
+                        await loadTopics();
+                        clearInterval(pollInterval);
+                        button.disabled = false;
+                        button.textContent = 'Analyze';
+                    } catch (error) {
+                        // Continue polling
+                    }
+                }, 5000);
+            } catch (error) {
+                antd.message.error('Error starting analysis');
+            }
+        });
+
+        // Load clusters with visualization update
+        async function loadClusters() {
+            try {
+                const response = await fetch(`${API_URL}/clusters`);
+                const clusters = await response.json();
+                
+                // Update chart data
+                topicChart.data.labels = clusters.map(c => `Cluster ${c.cluster_number}`);
+                topicChart.data.datasets[0].data = clusters.map(c => c.article_count);
+                topicChart.update();
+
+                const clustersDiv = document.getElementById('clusters');
+                clustersDiv.innerHTML = clusters.map(cluster => `
+                    <div class="border rounded p-4 hover:shadow-lg cursor-pointer transition-shadow" 
+                         onclick="loadArticles(${cluster.cluster_number})">
+                        <h3 class="font-semibold">Cluster ${cluster.cluster_number}</h3>
+                        <p class="text-sm text-gray-600">Articles: ${cluster.article_count}</p>
+                        <div class="mt-2">
+                            <p class="text-sm font-medium">Top Terms:</p>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                ${cluster.top_terms.map(term => 
+                                    `<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">${term}</span>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                antd.message.error('Error loading clusters');
+            }
+        }
+
+        // Load articles with map markers
+        async function loadArticles(clusterId) {
+            try {
+                const response = await fetch(`${API_URL}/articles/${clusterId}`);
+                const articles = await response.json();
+                
+                // Clear existing markers
+                map.eachLayer((layer) => {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
+                });
+
+                const articlesDiv = document.getElementById('articles');
+                articlesDiv.innerHTML = articles.map(article => `
+                    <div class="border rounded-lg p-6 hover:shadow-lg transition-shadow">
+                        <h3 class="font-semibold text-lg">${article.Title}</h3>
+                        <p class="text-sm text-gray-600">PMID: ${article.PMID}</p>
+                        <p class="mt-4 text-gray-700">${article.Abstract}</p>
+                        <div class="mt-4 space-y-2">
+                            <h4 class="font-medium">Entities:</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                ${Object.entries(article.Entities).map(([key, values]) => `
+                                    <div class="bg-gray-50 p-3 rounded">
+                                        <p class="font-medium text-sm">${key}:</p>
+                                        <p class="text-sm text-gray-600">${values.join(', ')}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ${article.Dominant_Topic !== null ? `
+                            <div class="mt-4">
+                                <p class="text-sm"><span class="font-medium">Dominant Topic:</span> ${article.Dominant_Topic}</p>
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('');
+            } catch (error) {
+                antd.message.error('Error loading articles');
+            }
+        }
+
+        // Load LDA topics
+        async function loadTopics() {
+            try {
+                const response = await fetch(`${API_URL}/topics`);
+                const topics = await response.json();
+                
+                const topicsDiv = document.getElementById('topics');
+                topicsDiv.innerHTML = topics.map((topic, index) => `
+                    <div class="p-3 bg-gray-50 rounded hover:shadow-md transition-shadow">
+                        <p class="text-sm"><span class="font-medium">Topic ${index}:</span> ${topic}</p>
+                    </div>
+                `).join('');
+            } catch (error) {
+                antd.message.error('Error loading topics');
+            }
+        }
+
+        // Initialize everything
+        initMap();
+        initChart();
+        checkStatus();
+        loadClusters();
+        loadTopics();
+    </script>
+</body>
+</html>

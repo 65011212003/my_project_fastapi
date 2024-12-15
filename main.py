@@ -39,6 +39,13 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from gensim import corpora, models
 
+from fastapi.responses import FileResponse
+from fastapi import Query
+import json
+from datetime import datetime, timedelta
+import io
+import aiohttp
+
 # -----------------------------------
 # Setup Logging
 # -----------------------------------
@@ -93,7 +100,7 @@ app.add_middleware(
 # -----------------------------------
 class PubMedQuery(BaseModel):
     query: str
-    max_results: Optional[int] = 1000
+    max_results: Optional[int] = 10000
 
 class AnalysisResponse(BaseModel):
     message: str
@@ -111,6 +118,37 @@ class Article(BaseModel):
     Cluster: int
     Entities: dict
     Dominant_Topic: Optional[int]
+
+class SearchQuery(BaseModel):
+    keyword: str
+    field: str = "Title"  # Can be "Title", "Abstract", or "All"
+
+class StatisticsResponse(BaseModel):
+    disease_counts: dict
+    yearly_trends: dict
+    top_keywords: List[dict]
+
+class TopicExplanation(BaseModel):
+    topic_id: int
+    main_focus: str
+    simple_explanation: str
+    key_terms: List[str]
+    relevance_score: float
+
+class PaginatedResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    items: List[Article]
+
+class NewsArticle(BaseModel):
+    title: str
+    description: Optional[str]
+    url: str
+    urlToImage: Optional[str]
+    publishedAt: str
+    source: dict
 
 # -----------------------------------
 # Utility Functions
@@ -493,3 +531,357 @@ def get_csv_data():
         "headers": headers,
         "rows": rows
     }
+
+@app.get("/export/{format}")
+def export_data(format: str):
+    """
+    Export analysis results in CSV or JSON format.
+    """
+    data_path = "rice_disease_analysis/rice_disease_pubmed_data.csv"
+    if not os.path.exists(data_path):
+        raise HTTPException(status_code=404, detail="Data not found. Please run the analysis first.")
+
+    df = pd.read_csv(data_path)
+    
+    if format.lower() == "csv":
+        # Create a buffer to store the CSV data
+        buffer = io.StringIO()
+        df.to_csv(buffer, index=False)
+        buffer.seek(0)
+        
+        # Create filename with timestamp
+        filename = f"rice_disease_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        
+        return FileResponse(
+            path=data_path,
+            filename=filename,
+            media_type="text/csv"
+        )
+    
+    elif format.lower() == "json":
+        # Convert DataFrame to JSON
+        json_data = df.to_json(orient="records")
+        filename = f"rice_disease_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        # Save JSON to file
+        json_path = os.path.join("rice_disease_analysis", filename)
+        with open(json_path, "w") as f:
+            f.write(json_data)
+            
+        return FileResponse(
+            path=json_path,
+            filename=filename,
+            media_type="application/json"
+        )
+    
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported format. Use 'csv' or 'json'.")
+
+@app.post("/search", response_model=List[Article])
+def search_articles(query: SearchQuery):
+    """
+    Search articles by keyword in title or abstract.
+    """
+    data_path = "rice_disease_analysis/rice_disease_pubmed_data.csv"
+    if not os.path.exists(data_path):
+        raise HTTPException(status_code=404, detail="Data not found. Please run the analysis first.")
+
+    try:
+        df = pd.read_csv(data_path)
+        logging.info(f"Searching for keyword '{query.keyword}' in field '{query.field}'")
+        
+        # Convert keyword to lowercase for case-insensitive search
+        keyword = query.keyword.lower()
+        
+        if query.field == "Title":
+            mask = df['Title'].str.lower().str.contains(keyword, na=False)
+        elif query.field == "Abstract":
+            mask = df['Abstract'].str.lower().str.contains(keyword, na=False)
+        else:  # All
+            mask = (df['Title'].str.lower().str.contains(keyword, na=False) | 
+                   df['Abstract'].str.lower().str.contains(keyword, na=False))
+        
+        filtered_df = df[mask]
+        logging.info(f"Found {len(filtered_df)} matching articles")
+        
+        if filtered_df.empty:
+            return []
+        
+        articles = []
+        for _, row in filtered_df.iterrows():
+            try:
+                entities = row['Entities']
+                if isinstance(entities, str):
+                    entities = eval(entities)
+                
+                # Convert PMID to string and handle NaN values
+                pmid = str(row['PMID']) if pd.notna(row['PMID']) else ''
+                
+                # Handle potential NaN values in other fields
+                article = Article(
+                    PMID=pmid,
+                    Title=str(row['Title']) if pd.notna(row['Title']) else '',
+                    Abstract=str(row['Abstract']) if pd.notna(row['Abstract']) else '',
+                    Processed_Abstract=str(row['Processed_Abstract']) if pd.notna(row['Processed_Abstract']) else '',
+                    Cluster=int(row['Cluster']) if pd.notna(row['Cluster']) else 0,
+                    Entities=entities if isinstance(entities, dict) else {},
+                    Dominant_Topic=int(row['Dominant_Topic']) if pd.notna(row['Dominant_Topic']) else None
+                )
+                articles.append(article)
+            except Exception as e:
+                logging.error(f"Error processing article {pmid}: {str(e)}")
+                continue
+        
+        return articles
+        
+    except Exception as e:
+        logging.error(f"Error in search_articles: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error searching articles: {str(e)}")
+
+@app.get("/statistics", response_model=StatisticsResponse)
+def get_statistics():
+    """
+    Get statistical information about the analyzed data.
+    """
+    data_path = "rice_disease_analysis/rice_disease_pubmed_data.csv"
+    if not os.path.exists(data_path):
+        raise HTTPException(status_code=404, detail="Data not found. Please run the analysis first.")
+
+    df = pd.read_csv(data_path)
+    
+    # Count diseases mentioned
+    disease_counts = {}
+    for _, row in df.iterrows():
+        entities = row['Entities']
+        if isinstance(entities, str):
+            try:
+                entities = eval(entities)
+                if 'Disease' in entities:
+                    for disease in entities['Disease']:
+                        disease_counts[disease] = disease_counts.get(disease, 0) + 1
+            except:
+                continue
+    
+    # Get top 10 diseases
+    disease_counts = dict(sorted(disease_counts.items(), key=lambda x: x[1], reverse=True)[:10])
+    
+    # Extract years from titles or abstracts (assuming year is mentioned)
+    years = []
+    pattern = r'\b(19|20)\d{2}\b'
+    for text in df['Abstract']:
+        if isinstance(text, str):
+            found_years = re.findall(pattern, text)
+            years.extend(found_years)
+    
+    yearly_trends = {}
+    for year in years:
+        yearly_trends[year] = yearly_trends.get(year, 0) + 1
+    
+    # Get top keywords from processed abstracts
+    words = []
+    for text in df['Processed_Abstract']:
+        if isinstance(text, str):
+            words.extend(text.split())
+    
+    word_freq = {}
+    for word in words:
+        word_freq[word] = word_freq.get(word, 0) + 1
+    
+    top_keywords = [{"word": k, "count": v} 
+                   for k, v in sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:20]]
+    
+    return StatisticsResponse(
+        disease_counts=disease_counts,
+        yearly_trends=yearly_trends,
+        top_keywords=top_keywords
+    )
+
+@app.get("/farmer-topics", response_model=List[TopicExplanation])
+def get_farmer_friendly_topics():
+    """
+    Get farmer-friendly explanations of the LDA topics.
+    """
+    topics_path = "rice_disease_analysis/lda_topics.txt"
+    if not os.path.exists(topics_path):
+        raise HTTPException(status_code=404, detail="LDA topics not found. Please run the analysis first.")
+
+    with open(topics_path, "r") as f:
+        topics = f.readlines()
+
+    farmer_friendly_topics = []
+    
+    # Create farmer-friendly explanations for each topic
+    topic_explanations = {
+        0: {
+            "main_focus": "การป้องกันโรคข้าว",
+            "simple_explanation": "เกี่ยวกับวิธีการป้องกันและต่อต้านโรคในนาข้าว รวมถึงการจัดการพันธุ์ข้าวที่ทนทาน",
+            "key_terms": ["การป้องกัน", "ความต้านทาน", "พันธุ์ข้าว", "การจัดการโรค"]
+        },
+        1: {
+            "main_focus": "โรคข้าวและเชื้อก่อโรค",
+            "simple_explanation": "เกี่ยวกับชนิดของโรคข้าวและเชื้อที่ทำให้เกิดโรค รวมถึงการระบาดในพื้นที่ต่างๆ",
+            "key_terms": ["โรคข้าว", "เชื้อโรค", "การระบาด", "อาการ"]
+        },
+        2: {
+            "main_focus": "การจัดการนาข้าว",
+            "simple_explanation": "วิธีการดูแลนาข้าวให้แข็งแรง ลดการเกิดโรค และการจัดการน้ำและปุ๋ย",
+            "key_terms": ["การจัดการ", "การดูแล", "การเพาะปลูก", "สภาพแวดล้อม"]
+        },
+        3: {
+            "main_focus": "การตรวจสอบโรค",
+            "simple_explanation": "วิธีสังเกตและตรวจหาโรคในนาข้าว รวมถึงการวินิจฉัยอาการเบื้องต้น",
+            "key_terms": ["การตรวจสอบ", "อาการของโรค", "การวินิจฉัย", "การสังเกต"]
+        },
+        4: {
+            "main_focus": "การวิจัยและพัฒนา",
+            "simple_explanation": "ผลการศึกษาวิจัยใหม่ๆ เกี่ยวกับโรคข้าวและวิธีการป้องกันที่ได้ผล",
+            "key_terms": ["การวิจัย", "การพัฒนา", "นวัตกรรม", "เทคโนโลยี"]
+        }
+    }
+
+    for idx, topic in enumerate(topics):
+        # Extract weights using regex to handle different formats
+        try:
+            # Remove "Topic X:" prefix if present
+            topic_text = topic.split(':', 1)[-1].strip()
+            # Extract all numbers before "*" symbols
+            weights = []
+            terms = topic_text.split('+')
+            for term in terms:
+                term = term.strip()
+                if '*' in term:
+                    weight_str = term.split('*')[0].strip()
+                    try:
+                        weight = float(weight_str)
+                        weights.append(weight)
+                    except ValueError:
+                        continue
+            
+            # Calculate relevance score
+            relevance_score = sum(weights) * 100 if weights else 50  # Default to 50 if no weights found
+        except Exception as e:
+            logging.error(f"Error parsing topic weights: {e}")
+            relevance_score = 50  # Default score if parsing fails
+        
+        explanation = topic_explanations.get(idx, {
+            "main_focus": "หัวข้ออื่นๆ",
+            "simple_explanation": "ข้อมูลเพิ่มเติมเกี่ยวกับการดูแลและจัดการนาข้าว",
+            "key_terms": ["การดูแล", "การจัดการ", "ข้อมูลเพิ่มเติม"]
+        })
+
+        farmer_friendly_topics.append(TopicExplanation(
+            topic_id=idx,
+            main_focus=explanation["main_focus"],
+            simple_explanation=explanation["simple_explanation"],
+            key_terms=explanation["key_terms"],
+            relevance_score=round(relevance_score, 2)
+        ))
+
+    return farmer_friendly_topics
+
+@app.get("/articles", response_model=PaginatedResponse)
+async def get_articles(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
+    try:
+        df = pd.read_csv("rice_disease_analysis/rice_disease_pubmed_data.csv")
+        
+        # Calculate pagination values
+        total_items = len(df)
+        total_pages = (total_items + page_size - 1) // page_size
+        
+        # Ensure page is within valid range
+        page = min(max(1, page), total_pages)
+        
+        # Get slice of data for current page
+        start_idx = (page - 1) * page_size
+        end_idx = min(start_idx + page_size, total_items)
+        
+        # Convert the slice of DataFrame to list of Articles
+        articles = []
+        for _, row in df.iloc[start_idx:end_idx].iterrows():
+            article = Article(
+                PMID=str(row['PMID']),
+                Title=row['Title'],
+                Abstract=row['Abstract'],
+                Processed_Abstract=row['Processed_Abstract'],
+                Cluster=int(row['Cluster']),
+                Entities=eval(row['Entities']) if isinstance(row['Entities'], str) else row['Entities'],
+                Dominant_Topic=int(row['Dominant_Topic']) if pd.notna(row['Dominant_Topic']) else None
+            )
+            articles.append(article)
+        
+        return PaginatedResponse(
+            total=total_items,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+            items=articles
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Add News API configuration
+NEWS_API_KEY = "fb075743fae14f89a5cc6bc75ff19009"
+NEWS_API_URL = "https://newsapi.org/v2/everything"
+
+@app.get("/news", response_model=List[NewsArticle])
+async def get_rice_disease_news():
+    """
+    Fetch news articles about rice diseases from News API.
+    """
+    try:
+        # Calculate date for last 30 days
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
+        
+        params = {
+            "q": "rice disease OR rice diseases OR rice pest OR rice farming",
+            "from": start_date.strftime("%Y-%m-%d"),
+            "to": end_date.strftime("%Y-%m-%d"),
+            "language": "en",
+            "sortBy": "publishedAt",
+            "apiKey": NEWS_API_KEY
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(NEWS_API_URL, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    articles = data.get("articles", [])
+                    
+                    # Validate and clean the articles data
+                    cleaned_articles = []
+                    for article in articles[:10]:  # Get top 10 most recent articles
+                        try:
+                            cleaned_article = {
+                                "title": article.get("title", ""),
+                                "description": article.get("description", ""),
+                                "url": article.get("url", ""),
+                                "urlToImage": article.get("urlToImage", ""),
+                                "publishedAt": article.get("publishedAt", ""),
+                                "source": article.get("source", {})
+                            }
+                            cleaned_articles.append(NewsArticle(**cleaned_article))
+                        except Exception as e:
+                            logging.error(f"Error processing article: {str(e)}")
+                            continue
+                    
+                    return cleaned_articles
+                else:
+                    error_data = await response.json()
+                    error_message = error_data.get("message", "Failed to fetch news articles")
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=error_message
+                    )
+                    
+    except aiohttp.ClientError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Error connecting to News API: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching news: {str(e)}"
+        )

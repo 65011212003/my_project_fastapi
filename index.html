@@ -1,23 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rice Disease Analysis</title>
+    <title>ระบบวิเคราะห์โรคข้าว</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd/dist/antd.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/antd/dist/antd.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@4.24.15/dist/antd.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/antd@4.24.15/dist/antd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ant-design/icons@4.8.0/dist/index.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <!-- Add custom fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
-    <!-- Add custom styles -->
+    <!-- Add Thai font -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/flag-icon-css@3.5.0/css/flag-icon.min.css" rel="stylesheet">
     <style>
         body {
-            font-family: 'Poppins', sans-serif;
+            font-family: 'Sarabun', sans-serif;
             background: url('https://t4.ftcdn.net/jpg/02/70/12/65/360_F_270126543_Fpjy5Y3I0JHGOazU5UxKZxG3hMXv7ixC.jpg') no-repeat center center fixed;
             background-size: cover;
             min-height: 100vh;
@@ -138,31 +138,67 @@
             display: inline-block;
             margin: 0.25rem;
         }
+
+        .language-selector {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+            background: white;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .language-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem;
+            margin: 0.25rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .language-btn:hover {
+            background-color: #f7fafc;
+        }
+
+        .language-btn.active {
+            background-color: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .flag-icon {
+            margin-right: 0.5rem;
+        }
     </style>
 </head>
 
 <body class="min-h-screen py-8">
     <div class="container mx-auto px-4">
         <div class="gradient-header mb-8">
-            <h1 class="text-4xl font-bold text-center">Rice Disease Analysis Platform</h1>
-            <p class="text-center mt-2 text-gray-100">Advanced Research Analysis Tool for Rice Diseases</p>
+            <h1 class="text-4xl font-bold text-center">ระบบวิเคราะห์โรคข้าว</h1>
+            <p class="text-center mt-2 text-gray-100">เครื่องมือวิเคราะห์งานวิจัยโรคข้าวขั้นสูง</p>
         </div>
 
         <!-- Export and Search Controls -->
         <div class="card p-6 mb-8">
             <div class="flex flex-wrap justify-between items-center gap-4">
                 <div class="flex gap-4">
-                    <button onclick="exportData('csv')" class="btn-primary">Export CSV</button>
-                    <button onclick="exportData('json')" class="btn-primary">Export JSON</button>
+                    <button onclick="exportData('csv')" class="btn-primary">ส่งออก CSV</button>
+                    <button onclick="exportData('json')" class="btn-primary">ส่งออก JSON</button>
                 </div>
                 <div class="flex gap-2 flex-grow md:flex-grow-0">
-                    <input type="text" id="searchKeyword" class="ant-input rounded-lg flex-grow" placeholder="Search keyword...">
+                    <input type="text" id="searchKeyword" class="ant-input rounded-lg flex-grow" placeholder="ค้นหาคำสำคัญ...">
                     <select id="searchField" class="ant-input rounded-lg">
-                        <option value="All">All</option>
-                        <option value="Title">Title</option>
-                        <option value="Abstract">Abstract</option>
+                        <option value="All">ทั้งหมด</option>
+                        <option value="Title">ชื่อเรื่อง</option>
+                        <option value="Abstract">บทคัดย่อ</option>
                     </select>
-                    <button onclick="searchArticles()" class="btn-primary">Search</button>
+                    <button onclick="searchArticles()" class="btn-primary">ค้นหา</button>
                 </div>
             </div>
         </div>
@@ -170,22 +206,22 @@
         <!-- Statistics Section -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
             <div class="card p-6">
-                <h2 class="text-2xl font-semibold mb-4 text-green-800">Disease Distribution</h2>
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">การกระจายของโรค</h2>
                 <canvas id="diseaseChart"></canvas>
             </div>
             <div class="card p-6">
-                <h2 class="text-2xl font-semibold mb-4 text-green-800">Yearly Trends</h2>
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">แนวโน้ม���ายปี</h2>
                 <canvas id="yearlyChart"></canvas>
             </div>
             <div class="card p-6">
-                <h2 class="text-2xl font-semibold mb-4 text-green-800">Top Keywords</h2>
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">คำสำคัญยอดนิยม</h2>
                 <div id="keywordCloud" class="flex flex-wrap gap-2"></div>
             </div>
         </div>
 
-        <!-- Add News Section after the Statistics Section -->
+        <!-- News Section -->
         <div class="card p-6 mb-8">
-            <h2 class="text-2xl font-semibold mb-4 text-green-800">Latest Rice Disease News</h2>
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">ข่าวสารโรคข้าวล่าสุด</h2>
             <div id="newsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <!-- News articles will be loaded here -->
             </div>
@@ -193,50 +229,50 @@
 
         <!-- Clustering Plot Image -->
         <div class="card p-6 mb-8">
-            <h2 class="text-2xl font-semibold mb-4 text-green-800">Clustering Analysis</h2>
-            <img src="rice_disease_analysis/clustering_plots.png" alt="Clustering Plot" class="clustering-plot">
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">การวิเคราะห์กลุ่ม</h2>
+            <img src="rice_disease_analysis/clustering_plots.png" alt="แผนภาพการจัดกลุ่ม" class="clustering-plot">
         </div>
 
         <!-- CSV Data -->
         <div class="card p-6 mb-8">
-            <h2 class="text-2xl font-semibold mb-4 text-green-800">Research Data</h2>
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">ข้อมูลงานวิจัย</h2>
             <div class="csv-table" id="csvData">
-                <!-- CSV data will be loaded here via JavaScript -->
+                <!-- CSV data will be loaded here -->
             </div>
         </div>
 
         <!-- Status Card -->
         <div class="card p-6 mb-8">
-            <h2 class="text-2xl font-semibold mb-4 text-green-800">System Status</h2>
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">สถานะระบบ</h2>
             <div id="status" class="text-gray-700"></div>
         </div>
 
         <!-- Query Form -->
         <div class="card p-8 mb-8">
-            <h2 class="text-2xl font-semibold mb-6 text-green-800">Research Query</h2>
+            <h2 class="text-2xl font-semibold mb-6 text-green-800">ค้นหางานวิจัย</h2>
             <form id="queryForm" class="space-y-6">
                 <div>
-                    <label class="block text-lg font-medium text-gray-700 mb-2">Search Query</label>
+                    <label class="block text-lg font-medium text-gray-700 mb-2">คำค้นหา</label>
                     <input type="text" id="query" class="ant-input text-lg p-3 rounded-lg w-full"
-                        placeholder="Enter your research query (e.g., rice blast disease)" required>
+                        placeholder="ใส่คำค้นหา (เช่น โรคไหม้ข้าว)" required>
                 </div>
                 <div>
-                    <label class="block text-lg font-medium text-gray-700 mb-2">Maximum Results</label>
+                    <label class="block text-lg font-medium text-gray-700 mb-2">จำนวนผลลัพธ์สูงสุด</label>
                     <input type="number" id="maxResults" class="ant-input text-lg p-3 rounded-lg w-full" value="1000"
                         min="1" max="5000">
                 </div>
-                <button type="submit" class="btn-primary w-full text-lg font-semibold">Begin Analysis</button>
+                <button type="submit" class="btn-primary w-full text-lg font-semibold">เริ่มวิเคราะห์</button>
             </form>
         </div>
 
         <!-- Visualization Section -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             <div class="card p-6">
-                <h2 class="text-2xl font-semibold mb-4 text-green-800">Topic Distribution</h2>
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">การกระจายของหัวข้อ</h2>
                 <canvas id="topicChart"></canvas>
             </div>
             <div class="card p-6">
-                <h2 class="text-2xl font-semibold mb-4 text-green-800">Global Research Map</h2>
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">แผนที่งานวิจัยทั่วโลก</h2>
                 <div id="map" style="height: 400px;"></div>
             </div>
         </div>
@@ -244,7 +280,7 @@
         <!-- Analysis Results -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div class="card p-6">
-                <h2 class="text-2xl font-semibold mb-6 text-green-800">Research Clusters</h2>
+                <h2 class="text-2xl font-semibold mb-6 text-green-800">กลุ่มงานวิจัย</h2>
                 <div id="clusters" class="space-y-4"></div>
             </div>
             <div class="card p-6">
@@ -257,14 +293,14 @@
 
         <!-- Articles Section -->
         <div class="card p-8 mt-8">
-            <h2 class="text-2xl font-semibold mb-6 text-green-800">Research Articles</h2>
+            <h2 class="text-2xl font-semibold mb-6 text-green-800">บทความวิจัย</h2>
             <div id="articlesContainer" class="space-y-6">
                 <!-- Articles will be loaded here -->
             </div>
             <!-- Pagination Controls -->
             <div class="flex justify-between items-center mt-6">
                 <div class="flex items-center gap-2">
-                    <span class="text-gray-600">Page Size:</span>
+                    <span class="text-gray-600">จำนวนต่อหน้า:</span>
                     <select id="pageSize" class="ant-input rounded-lg" onchange="changePageSize()">
                         <option value="10">10</option>
                         <option value="20">20</option>
@@ -273,15 +309,233 @@
                     </select>
                 </div>
                 <div class="flex items-center gap-4">
-                    <button id="prevPage" onclick="previousPage()" class="btn-primary" disabled>Previous</button>
-                    <span id="pageInfo" class="text-gray-600">Page 1 of 1</span>
-                    <button id="nextPage" onclick="nextPage()" class="btn-primary" disabled>Next</button>
+                    <button id="prevPage" onclick="previousPage()" class="btn-primary" disabled>ก่อนหน้า</button>
+                    <span id="pageInfo" class="text-gray-600">หน้า 1 จาก 1</span>
+                    <button id="nextPage" onclick="nextPage()" class="btn-primary" disabled>ถัดไป</button>
                 </div>
             </div>
         </div>
     </div>
 
+    <div class="language-selector">
+        <button onclick="changeLanguage('th')" class="language-btn active" id="lang-th">
+            <span class="flag-icon flag-icon-th"></span> ไทย
+        </button>
+        <button onclick="changeLanguage('en')" class="language-btn" id="lang-en">
+            <span class="flag-icon flag-icon-gb"></span> English
+        </button>
+        <button onclick="changeLanguage('zh')" class="language-btn" id="lang-zh">
+            <span class="flag-icon flag-icon-cn"></span> 中文
+        </button>
+    </div>
+
     <script>
+        // Update map center to Thailand
+        function initMap() {
+            map = L.map('map').setView([13.7563, 100.5018], 3);  // Zoomed out for global view
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Add legend
+            const legend = L.control({ position: 'bottomright' });
+            legend.onAdd = function (map) {
+                const div = L.DomUtil.create('div', 'info legend');
+                div.style.backgroundColor = 'white';
+                div.style.padding = '10px';
+                div.style.borderRadius = '5px';
+                div.innerHTML = `
+                    <h4 class="font-semibold mb-2">สัญลักษณ์แผนที่</h4>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="inline-block w-3 h-3 rounded-full bg-red-500"></span>
+                        <span>โรคระบาดรุนแรง</span>
+                    </div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="inline-block w-3 h-3 rounded-full bg-yellow-500"></span>
+                        <span>โรคระบาดปานกลาง</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="inline-block w-3 h-3 rounded-full bg-green-500"></span>
+                        <span>โรคระบาดน้อย</span>
+                    </div>
+                `;
+                return div;
+            };
+            legend.addTo(map);
+
+            // Function to update map markers based on research data
+            async function updateMapMarkers() {
+                try {
+                    const response = await fetch(`${API_URL}/research-locations`);
+                    const data = await response.json();
+                    
+                    // Clear existing markers
+                    map.eachLayer((layer) => {
+                        if (layer instanceof L.Marker) {
+                            map.removeLayer(layer);
+                        }
+                    });
+
+                    // Add new markers
+                    data.forEach(location => {
+                        const markerColor = getMarkerColor(location.severity);
+                        const customIcon = L.divIcon({
+                            className: 'custom-div-icon',
+                            html: `<div style="background-color: ${markerColor}; width: 15px; height: 15px; border-radius: 50%; border: 2px solid white;"></div>`,
+                            iconSize: [15, 15],
+                            iconAnchor: [7, 7]
+                        });
+
+                        const marker = L.marker([location.lat, location.lng], { icon: customIcon })
+                            .addTo(map)
+                            .bindPopup(createPopupContent(location));
+
+                        // Add click event for detailed information
+                        marker.on('click', () => {
+                            showDetailedInfo(location);
+                        });
+                    });
+                } catch (error) {
+                    console.error('Error updating map markers:', error);
+                }
+            }
+
+            // Function to determine marker color based on severity
+            function getMarkerColor(severity) {
+                if (severity >= 7) return '#EF4444'; // red
+                if (severity >= 4) return '#F59E0B'; // yellow
+                return '#10B981'; // green
+            }
+
+            // Function to create popup content
+            function createPopupContent(location) {
+                return `
+                    <div class="p-2">
+                        <h3 class="font-semibold text-lg mb-2">${location.name}</h3>
+                        <div class="mb-2">
+                            <strong>โรคที่พบ:</strong> ${location.diseases.join(', ')}
+                        </div>
+                        <div class="mb-2">
+                            <strong>ความรุนแรง:</strong> 
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div class="bg-green-600 h-2.5 rounded-full" style="width: ${location.severity * 10}%"></div>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <strong>จำนวนงานวิจัย:</strong> ${location.researchCount}
+                        </div>
+                        <button onclick="showDetailedInfo(${JSON.stringify(location).replace(/"/g, '&quot;')})" 
+                                class="bg-green-600 text-white px-3 py-1 rounded-full text-sm hover:bg-green-700 transition-colors">
+                            ดูรายละเอียด
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Function to show detailed information in a modal
+            function showDetailedInfo(location) {
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                        <div class="flex justify-between items-start mb-4">
+                            <h2 class="text-2xl font-semibold text-green-800">${location.name}</h2>
+                            <button onclick="this.closest('.fixed').remove()" 
+                                    class="text-gray-500 hover:text-gray-700">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <h3 class="font-semibold mb-2">โรคที่พบในพื้นที่</h3>
+                                <div class="flex flex-wrap gap-2">
+                                    ${location.diseases.map(disease => `
+                                        <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                            ${disease}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold mb-2">สถิติการวิจัย</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                        <p class="text-sm text-gray-600">จำนวนงานวิจัยทั้งหมด</p>
+                                        <p class="text-2xl font-semibold text-green-600">${location.researchCount}</p>
+                                    </div>
+                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                        <p class="text-sm text-gray-600">ระดับความรุนแรงของโรค</p>
+                                        <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                                            <div class="bg-green-600 h-2.5 rounded-full" 
+                                                 style="width: ${location.severity * 10}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold mb-2">แนวโน้มการระบาด</h3>
+                                <canvas id="trendChart-${location.id}" class="w-full h-48"></canvas>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold mb-2">คำแนะนำสำหรับเกษตรกร</h3>
+                                <div class="bg-green-50 p-4 rounded-lg">
+                                    <ul class="list-disc list-inside space-y-2">
+                                        ${location.recommendations.map(rec => `
+                                            <li class="text-green-800">${rec}</li>
+                                        `).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold mb-2">งานวิจัยที่เกี่ยวข้อง</h3>
+                                <div class="space-y-3">
+                                    ${location.relatedResearch.map(research => `
+                                        <div class="border-l-4 border-green-500 pl-4">
+                                            <h4 class="font-medium">${research.title}</h4>
+                                            <p class="text-sm text-gray-600">${research.authors.join(', ')}</p>
+                                            <p class="text-sm text-gray-500">${research.year}</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+                // Initialize trend chart
+                const ctx = document.getElementById(`trendChart-${location.id}`).getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: location.trends.map(t => t.year),
+                        datasets: [{
+                            label: 'จำนวนการระบาด',
+                            data: location.trends.map(t => t.cases),
+                            borderColor: '#059669',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Initial update of markers
+            updateMapMarkers();
+
+            // Update markers periodically
+            setInterval(updateMapMarkers, 300000); // Update every 5 minutes
+        }
+
         // [Previous JavaScript code remains the same]
         const API_URL = 'http://localhost:8000';
         let map;
@@ -313,57 +567,6 @@
                 console.error('Error loading CSV:', error);
                 document.getElementById('csvData').innerHTML = '<p class="text-red-500">Error loading data</p>';
             }
-        }
-
-        // Initialize map
-        function initMap() {
-            map = L.map('map').setView([13.7563, 100.5018], 6); // Center on Thailand
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-
-            // Add markers for rice disease locations in Thailand
-            const riceDiseasesThailand = [
-                {
-                    lat: 13.7563,
-                    lng: 100.5018,
-                    name: "Bangkok Region",
-                    disease: "Rice Blast Disease",
-                    info: "Common in central Thailand during rainy season"
-                },
-                {
-                    lat: 18.7883,
-                    lng: 98.9853,
-                    name: "Chiang Mai Region",
-                    disease: "Bacterial Leaf Blight",
-                    info: "Prevalent in northern Thailand"
-                },
-                {
-                    lat: 14.8799,
-                    lng: 102.0132,
-                    name: "Nakhon Ratchasima Region",
-                    disease: "Brown Spot Disease",
-                    info: "Affects northeastern rice fields"
-                },
-                {
-                    lat: 7.8804,
-                    lng: 98.3923,
-                    name: "Phuket Region",
-                    disease: "Sheath Blight",
-                    info: "Common in southern Thailand's humid climate"
-                }
-            ];
-
-            // Add markers to map
-            riceDiseasesThailand.forEach(location => {
-                L.marker([location.lat, location.lng])
-                    .addTo(map)
-                    .bindPopup(`
-                        <b>${location.name}</b><br>
-                        <b>Disease:</b> ${location.disease}<br>
-                        <b>Info:</b> ${location.info}
-                    `);
-            });
         }
 
         // Initialize chart
@@ -888,6 +1091,240 @@
             loadNews();  // Add this line
         });
 
+        let currentLanguage = 'th';
+        const translationCache = {};
+
+        async function translateText(text, targetLang) {
+            if (!text || !text.trim()) return text;
+            
+            const cacheKey = `${text}_${targetLang}`;
+            if (translationCache[cacheKey]) {
+                return translationCache[cacheKey];
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/translate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        target_language: targetLang
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Translation error:', errorData);
+                    return text;
+                }
+
+                const data = await response.json();
+                translationCache[cacheKey] = data.translated_text;
+                return data.translated_text;
+            } catch (error) {
+                console.error('Translation error:', error);
+                return text;
+            }
+        }
+
+        async function translateBulk(texts, targetLang) {
+            if (!texts || texts.length === 0) return texts;
+
+            // Filter out empty texts
+            const validTexts = texts.filter(text => text && text.trim());
+            if (validTexts.length === 0) return texts;
+
+            try {
+                // Split into smaller batches of 5
+                const batchSize = 5;
+                const results = [];
+                
+                for (let i = 0; i < validTexts.length; i += batchSize) {
+                    const batch = validTexts.slice(i, i + batchSize);
+                    try {
+                        const response = await fetch(`${API_URL}/translate-bulk`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                texts: batch,
+                                target_language: targetLang
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            console.error('Batch translation error:', errorData);
+                            results.push(...batch); // Use original texts on error
+                            continue;
+                        }
+
+                        const data = await response.json();
+                        results.push(...data.translations.map(t => t.translated_text));
+                    } catch (error) {
+                        console.error('Batch translation error:', error);
+                        results.push(...batch); // Use original texts on error
+                    }
+                    
+                    // Add a small delay between batches
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                return results;
+            } catch (error) {
+                console.error('Bulk translation error:', error);
+                return texts;
+            }
+        }
+
+        async function changeLanguage(lang) {
+            if (currentLanguage === lang) return;
+
+            // Update button states
+            document.querySelectorAll('.language-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`lang-${lang}`).classList.add('active');
+
+            try {
+                // Show loading message
+                const loadingMessage = document.createElement('div');
+                loadingMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+                loadingMessage.textContent = 'Translating content...';
+                document.body.appendChild(loadingMessage);
+
+                // Get all translatable elements
+                const elements = document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, button, a');
+                const textsToTranslate = [];
+                const elementsToUpdate = [];
+
+                // Collect all texts that need translation
+                elements.forEach(element => {
+                    const text = element.textContent.trim();
+                    if (text && !element.closest('script') && !element.closest('style')) {
+                        textsToTranslate.push(text);
+                        elementsToUpdate.push(element);
+                    }
+                });
+
+                // Translate in smaller batches
+                const batchSize = 5;
+                for (let i = 0; i < textsToTranslate.length; i += batchSize) {
+                    const batch = textsToTranslate.slice(i, i + batchSize);
+                    try {
+                        const translations = await translateBulk(batch, lang);
+                        translations.forEach((translation, index) => {
+                            const element = elementsToUpdate[i + index];
+                            if (element) {
+                                if (!element.getAttribute('data-original')) {
+                                    element.setAttribute('data-original', element.textContent);
+                                }
+                                element.textContent = translation;
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Translation error for batch:', error);
+                    }
+                    
+                    // Update progress
+                    const progress = Math.min(100, Math.round((i + batchSize) / textsToTranslate.length * 100));
+                    loadingMessage.textContent = `Translating content... ${progress}%`;
+                    
+                    // Add a small delay between batches
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                // Update current language
+                currentLanguage = lang;
+                document.documentElement.lang = lang;
+
+                // Update dynamic content
+                const updateFunctions = [
+                    { fn: loadArticles, name: 'articles' },
+                    { fn: loadClusters, name: 'clusters' },
+                    { fn: loadFarmerTopics, name: 'farmer topics' },
+                    { fn: loadStatistics, name: 'statistics' },
+                    { fn: loadNews, name: 'news' }
+                ];
+
+                for (const { fn, name } of updateFunctions) {
+                    if (typeof fn === 'function') {
+                        try {
+                            loadingMessage.textContent = `Updating ${name}...`;
+                            await fn();
+                        } catch (error) {
+                            console.error(`Error updating ${name}:`, error);
+                        }
+                    }
+                }
+
+                // Remove loading message and show success message
+                document.body.removeChild(loadingMessage);
+                const successMessage = document.createElement('div');
+                successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+                successMessage.textContent = 'Language changed successfully';
+                document.body.appendChild(successMessage);
+                setTimeout(() => {
+                    document.body.removeChild(successMessage);
+                }, 3000);
+
+            } catch (error) {
+                console.error('Language change error:', error);
+                const errorMessage = document.createElement('div');
+                errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50';
+                errorMessage.textContent = 'Error changing language';
+                document.body.appendChild(errorMessage);
+                setTimeout(() => {
+                    document.body.removeChild(errorMessage);
+                }, 3000);
+            }
+        }
+
+        // Add language persistence
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load saved language preference
+            const savedLanguage = localStorage.getItem('preferredLanguage');
+            if (savedLanguage && savedLanguage !== currentLanguage) {
+                changeLanguage(savedLanguage);
+            }
+            
+            // Initialize content
+            loadArticles();
+            loadNews();
+        });
+
+        // Update language buttons to save preference
+        document.querySelectorAll('.language-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const lang = e.currentTarget.id.replace('lang-', '');
+                localStorage.setItem('preferredLanguage', lang);
+            });
+        });
+
+        // Modify existing functions to support translation
+        const originalLoadArticles = loadArticles;
+        loadArticles = async function() {
+            await originalLoadArticles();
+            if (currentLanguage !== 'th') {
+                // Translate the loaded articles
+                const articles = document.querySelectorAll('#articlesContainer .article');
+                for (const article of articles) {
+                    const title = article.querySelector('h3');
+                    const abstract = article.querySelector('p');
+                    
+                    if (title && abstract) {
+                        title.textContent = await translateText(title.textContent, currentLanguage);
+                        abstract.textContent = await translateText(abstract.textContent, currentLanguage);
+                    }
+                }
+            }
+        };
+
+        // Similarly modify other loading functions to support translation
+        // Add translation support to other dynamic content loading functions as needed
     </script>
 </body>
 

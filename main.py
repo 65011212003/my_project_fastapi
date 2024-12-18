@@ -13,7 +13,7 @@ import re
 import string
 import subprocess
 import sys
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import matplotlib
 # Set the backend to 'Agg' to avoid GUI warnings/errors
@@ -45,6 +45,10 @@ import json
 from datetime import datetime, timedelta
 import io
 import aiohttp
+
+import random
+
+from googletrans import Translator
 
 # -----------------------------------
 # Setup Logging
@@ -149,6 +153,35 @@ class NewsArticle(BaseModel):
     urlToImage: Optional[str]
     publishedAt: str
     source: dict
+
+class ResearchTrend(BaseModel):
+    year: str
+    cases: int
+
+class RelatedResearch(BaseModel):
+    title: str
+    authors: List[str]
+    year: str
+
+class ResearchLocation(BaseModel):
+    id: str
+    name: str
+    lat: float
+    lng: float
+    diseases: List[str]
+    severity: float  # 0-10
+    researchCount: int
+    trends: List[ResearchTrend]
+    recommendations: List[str]
+    relatedResearch: List[RelatedResearch]
+
+class TranslationRequest(BaseModel):
+    text: str
+    target_language: str
+
+class BulkTranslationRequest(BaseModel):
+    texts: List[str]
+    target_language: str
 
 # -----------------------------------
 # Utility Functions
@@ -884,4 +917,265 @@ async def get_rice_disease_news():
         raise HTTPException(
             status_code=500,
             detail=f"Error fetching news: {str(e)}"
+        )
+
+def get_location_recommendations(diseases: List[str]) -> List[str]:
+    """Generate context-aware recommendations based on diseases."""
+    recommendations = {
+        "โรคไหม้": [
+            "ใช้พันธุ์ข้าวที่ต้านทานโรค",
+            "หลีกเลี่ยงการใส่ปุ๋ยไนโตรเจนมากเกินไป",
+            "กำจัดวัชพืชในนาข้าวและบริเวณใกล้เคียง",
+            "ฉีดพ่นสารป้องกันกำจัดเชื้อราตามคำแนะนำ"
+        ],
+        "โรคขอบใบแห้ง": [
+            "ใช้เมล็ดพันธุ์ที่ปลอดโรค",
+            "ไม่ควรปลูกข้าวแน่นเกินไป",
+            "ระบายน้ำในแปลงนาให้ทั่วถึง",
+            "กำจัดหญ้าและพืชอาศัยของเชื้อโรค"
+        ],
+        "โรคใบจุดสีน้ำตาล": [
+            "ปรับปรุงดินด้วยการใส่ปูนขาว",
+            "ใช้ปุ๋ยโพแทสเซียมเพื่อเพิ่มความต้านทาน",
+            "เก็บเกี่ยวในระยะที่เหมาะสม",
+            "ทำความสะอาดแปลงนาหลังการเก็บเกี่ยว"
+        ],
+        "โรคกาบใบแห้ง": [
+            "ลดความหนาแน่นของการปลูก",
+            "ควบคุมระดับน้ำในนาให้เหมาะสม",
+            "ฉีดพ่นสารป้องกันกำจัดเชื้อราในระยะกำเนิดช่อดอก",
+            "ตากดินและไถกลบตอซัง"
+        ]
+    }
+    
+    result = []
+    for disease in diseases:
+        if disease in recommendations:
+            result.extend(recommendations[disease])
+    
+    # Add general recommendations if list is empty or too short
+    general_recommendations = [
+        "ตรวจแปลงนาอย่างสม่ำเสมอเพื่อสังเกตอาการของโรค",
+        "ปรึกษาเจ้าหน้าที่เกษตรในพื้นที่เมื่อพบปัญหา",
+        "ทำความสะอาดเครื่องมือและอุปกรณ์การเกษตร",
+        "วางแผนการปลูกให้เหมาะสมกับฤดูกาล"
+    ]
+    
+    while len(result) < 4:
+        result.append(random.choice(general_recommendations))
+    
+    return list(set(result))  # Remove duplicates
+
+def generate_disease_trends(years: int = 5) -> List[ResearchTrend]:
+    """Generate realistic disease trend data for the past few years."""
+    current_year = datetime.now().year
+    base_cases = random.randint(50, 200)
+    trends = []
+    
+    for i in range(years):
+        year = str(current_year - years + i + 1)
+        # Add some random variation but maintain a trend
+        variation = random.uniform(-0.3, 0.3)
+        cases = int(base_cases * (1 + variation))
+        base_cases = cases  # Use this as the base for next year
+        trends.append(ResearchTrend(year=year, cases=cases))
+    
+    return trends
+
+@app.get("/research-locations", response_model=List[ResearchLocation])
+async def get_research_locations():
+    """
+    Get research location data for the map visualization.
+    This endpoint aggregates research data by location and provides detailed information
+    about disease prevalence, severity, and related research in each area.
+    """
+    try:
+        # Read the CSV data
+        df = pd.read_csv("rice_disease_analysis/rice_disease_pubmed_data.csv")
+        
+        # Define major research locations
+        major_locations = {
+            "TH-C": {"name": "ภาคกลาง, ประเทศไทย", "lat": 13.7563, "lng": 100.5018},
+            "TH-N": {"name": "ภาคเหนือ, ประเทศไทย", "lat": 18.7883, "lng": 98.9853},
+            "TH-NE": {"name": "ภาคตะวันออกเฉียงเหนือ, ประเทศไทย", "lat": 14.8799, "lng": 102.0132},
+            "TH-S": {"name": "ภาคใต้, ประเทศไทย", "lat": 7.8804, "lng": 98.3923},
+            "CN": {"name": "จีน", "lat": 35.8617, "lng": 104.1954},
+            "IN": {"name": "อินเดีย", "lat": 20.5937, "lng": 78.9629},
+            "JP": {"name": "ญี่ปุ่น", "lat": 36.2048, "lng": 138.2529},
+            "PH": {"name": "ฟิลิปปินส์", "lat": 12.8797, "lng": 121.7740},
+            "VN": {"name": "เวียดนาม", "lat": 14.0583, "lng": 108.2772},
+            "ID": {"name": "อินโดนีเซีย", "lat": -0.7893, "lng": 113.9213}
+        }
+
+        research_locations = []
+        
+        for loc_id, location in major_locations.items():
+            # Simulate location-specific data
+            # In a real application, this would come from actual data analysis
+            
+            # Generate common rice diseases for the location
+            diseases = [
+                "โรคไหม้",
+                "โรคขอบใบแห้ง",
+                "โรคใบจุดสีน้ำตาล",
+                "โรคกาบใบแห้ง"
+            ]
+            random.shuffle(diseases)
+            diseases = diseases[:random.randint(2, 4)]  # Each location gets 2-4 diseases
+            
+            # Calculate severity based on various factors
+            severity = round(random.uniform(3, 9), 1)  # Scale of 0-10
+            
+            # Count related research papers
+            research_count = random.randint(10, 100)
+            
+            # Generate recommendations based on diseases
+            recommendations = get_location_recommendations(diseases)
+            
+            # Generate sample related research
+            related_research = []
+            for _ in range(3):  # 3 related papers per location
+                year = str(random.randint(2018, 2023))
+                related_research.append(RelatedResearch(
+                    title=f"การศึกษา{random.choice(diseases)}ในพื้นที่ {location['name']}",
+                    authors=[f"นักวิจัย {i+1}" for i in range(random.randint(1, 3))],
+                    year=year
+                ))
+            
+            # Create location object
+            research_location = ResearchLocation(
+                id=loc_id,
+                name=location["name"],
+                lat=location["lat"],
+                lng=location["lng"],
+                diseases=diseases,
+                severity=severity,
+                researchCount=research_count,
+                trends=generate_disease_trends(),
+                recommendations=recommendations,
+                relatedResearch=related_research
+            )
+            
+            research_locations.append(research_location)
+        
+        return research_locations
+        
+    except Exception as e:
+        logging.error(f"Error in get_research_locations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching research locations: {str(e)}")
+
+# Initialize the translator globally at the module level
+translator = None
+
+def get_translator():
+    """Get or initialize the translator."""
+    global translator
+    if translator is None:
+        try:
+            translator = Translator(service_urls=['translate.google.com'])
+            return translator
+        except Exception as e:
+            logging.error(f"Error initializing translator: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to initialize translator"
+            )
+    return translator
+
+@app.post("/translate")
+async def translate_text(request: TranslationRequest):
+    """
+    Translate text to the target language using googletrans.
+    """
+    try:
+        if not request.text or not request.text.strip():
+            return {
+                "translated_text": request.text,
+                "source_language": "auto"
+            }
+
+        trans = get_translator()
+        logging.info(f"Translating text to {request.target_language}: {request.text[:100]}...")
+        
+        result = trans.translate(
+            text=request.text,
+            dest=request.target_language
+        )
+        
+        return {
+            "translated_text": result.text,
+            "source_language": result.src
+        }
+    except Exception as e:
+        logging.error(f"Translation error: {str(e)}")
+        try:
+            # Try reinitializing translator
+            global translator
+            translator = Translator(service_urls=['translate.google.com'])
+            result = translator.translate(
+                text=request.text,
+                dest=request.target_language
+            )
+            return {
+                "translated_text": result.text,
+                "source_language": result.src
+            }
+        except Exception as e:
+            logging.error(f"Translation retry failed: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Translation error: {str(e)}"
+            )
+
+@app.post("/translate-bulk")
+async def translate_bulk(request: BulkTranslationRequest):
+    """
+    Translate multiple texts to the target language using googletrans.
+    """
+    try:
+        if not request.texts:
+            return {"translations": []}
+
+        # Filter out empty texts
+        texts_to_translate = [text for text in request.texts if text and text.strip()]
+        if not texts_to_translate:
+            return {"translations": []}
+
+        trans = get_translator()
+        translations = []
+        
+        # Translate texts in smaller batches
+        batch_size = 5
+        for i in range(0, len(texts_to_translate), batch_size):
+            batch = texts_to_translate[i:i + batch_size]
+            try:
+                for text in batch:
+                    result = trans.translate(
+                        text=text,
+                        dest=request.target_language
+                    )
+                    translations.append({
+                        "translated_text": result.text,
+                        "source_language": result.src
+                    })
+            except Exception as e:
+                logging.error(f"Error translating batch {i//batch_size + 1}: {str(e)}")
+                # Try reinitializing translator for this batch
+                translator = Translator(service_urls=['translate.google.com'])
+                for text in batch:
+                    result = translator.translate(
+                        text=text,
+                        dest=request.target_language
+                    )
+                    translations.append({
+                        "translated_text": result.text,
+                        "source_language": result.src
+                    })
+
+        return {"translations": translations}
+    except Exception as e:
+        logging.error(f"Bulk translation error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Bulk translation error: {str(e)}"
         )

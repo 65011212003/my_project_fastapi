@@ -1,0 +1,5 @@
+Topic 0: 0.043*"rice" + 0.031*"resistance" + 0.029*"blast" + 0.024*"gene" + 0.018*"disease" + 0.011*"oryzae" + 0.008*"plant" + 0.007*"breeding" + 0.006*"line" + 0.006*"variety"
+Topic 1: 0.037*"rice" + 0.033*"blast" + 0.022*"resistance" + 0.017*"gene" + 0.014*"disease" + 0.007*"panicle" + 0.007*"plant" + 0.006*"protein" + 0.006*"marker" + 0.005*"study"
+Topic 2: 0.022*"rice" + 0.017*"plant" + 0.013*"disease" + 0.012*"blast" + 0.009*"resistance" + 0.009*"protein" + 0.007*"gene" + 0.007*"cell" + 0.007*"infection" + 0.006*"oryzae"
+Topic 3: 0.031*"rice" + 0.014*"blast" + 0.014*"disease" + 0.012*"plant" + 0.011*"resistance" + 0.008*"oryzae" + 0.008*"gene" + 0.006*"pathogen" + 0.005*"response" + 0.005*"activity"
+Topic 4: 0.027*"rice" + 0.015*"blast" + 0.010*"disease" + 0.010*"model" + 0.007*"plant" + 0.007*"effector" + 0.007*"np" + 0.007*"panicle" + 0.007*"cell" + 0.006*"fungal"

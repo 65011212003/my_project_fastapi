@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>การวิเคราะห์ - ระบบวิเคราะห์โรคข้าว</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@4.24.15/dist/antd.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/antd@4.24.15/dist/antd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ant-design/icons@4.8.0/dist/index.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/flag-icon-css@3.5.0/css/flag-icon.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+
+<body class="min-h-screen py-8">
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 bg-white shadow-md z-50">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-green-800">ระบบวิเคราะห์โรคข้าว</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="Home.html" class="nav-link">หน้าหลัก</a>
+                    <a href="Analysis.html" class="nav-link active">การวิเคราะห์</a>
+                    <a href="Solutions.html" class="nav-link">วิธีการรักษา</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 mt-20">
+        <!-- Query Form -->
+        <div class="card p-8 mb-8">
+            <h2 class="text-2xl font-semibold mb-6 text-green-800">ค้นหางานวิจัย</h2>
+            <form id="queryForm" class="space-y-6">
+                <div>
+                    <label class="block text-lg font-medium text-gray-700 mb-2">คำค้นหา</label>
+                    <input type="text" id="query" class="ant-input text-lg p-3 rounded-lg w-full"
+                        placeholder="ใส่คำค้นหา (เช่น โรคไหม้ข้าว)" required>
+                </div>
+                <div>
+                    <label class="block text-lg font-medium text-gray-700 mb-2">จำนวนผลลัพธ์สูงสุด</label>
+                    <input type="number" id="maxResults" class="ant-input text-lg p-3 rounded-lg w-full" value="1000"
+                        min="1" max="5000">
+                </div>
+                <button type="submit" class="btn-primary w-full text-lg font-semibold">เริ่มวิเคราะห์</button>
+            </form>
+        </div>
+
+        <!-- Clustering Plot Image -->
+        <div class="card p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">การวิเคราะห์กลุ่ม</h2>
+            <img src="../rice_disease_analysis/clustering_plots.png" alt="แผนภาพการจัดกลุ่ม" class="clustering-plot">
+        </div>
+
+        <!-- Analysis Results -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-6 text-green-800">กลุ่มงานวิจัย</h2>
+                <div id="clusters" class="space-y-4"></div>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-6 text-green-800">การวิเคราะห์หัวข้อสำหรับเกษตรกร</h2>
+                <div id="farmerTopics" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Topics will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Articles Section -->
+        <div class="card p-8 mt-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-green-800">บทความวิจัย</h2>
+                <div class="flex gap-4">
+                    <button onclick="exportData('csv')" class="btn-primary">ส่งออก CSV</button>
+                    <button onclick="exportData('json')" class="btn-primary">ส่งออก JSON</button>
+                </div>
+            </div>
+            <div id="articlesContainer" class="space-y-6">
+                <!-- Articles will be loaded here -->
+            </div>
+            <!-- Pagination Controls -->
+            <div class="flex justify-between items-center mt-6">
+                <div class="flex items-center gap-2">
+                    <span class="text-gray-600">จำนวนต่อหน้า:</span>
+                    <select id="pageSize" class="ant-input rounded-lg" onchange="changePageSize()">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button id="prevPage" onclick="previousPage()" class="btn-primary" disabled>ก่อนหน้า</button>
+                    <span id="pageInfo" class="text-gray-600">หน้า 1 จาก 1</span>
+                    <button id="nextPage" onclick="nextPage()" class="btn-primary" disabled>ถัดไป</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Language Selector -->
+    <div class="language-selector">
+        <button onclick="changeLanguage('th')" class="language-btn active" id="lang-th">
+            <span class="flag-icon flag-icon-th"></span> ไทย
+        </button>
+        <button onclick="changeLanguage('en')" class="language-btn" id="lang-en">
+            <span class="flag-icon flag-icon-gb"></span> English
+        </button>
+        <button onclick="changeLanguage('zh')" class="language-btn" id="lang-zh">
+            <span class="flag-icon flag-icon-cn"></span> 中文
+        </button>
+    </div>
+
+    <script src="../scripts/common.js"></script>
+    <script src="../scripts/analysis.js"></script>
+</body>
+</html> 

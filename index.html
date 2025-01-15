@@ -315,6 +315,14 @@
                 </div>
             </div>
         </div>
+
+        <!-- Disease Solutions Section -->
+        <div class="card p-8 mt-8">
+            <h2 class="text-2xl font-semibold mb-6 text-green-800">วิธีการรักษาโรคข้าว</h2>
+            <div id="diseaseSolutions" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Disease solutions will be loaded here -->
+            </div>
+        </div>
     </div>
 
     <div class="language-selector">
@@ -632,6 +640,30 @@
                 });
                 const data = await response.json();
                 antd.message.success(data.message);
+
+                // Display cluster explanations if available
+                if (data.cluster_explanations) {
+                    const clustersDiv = document.getElementById('clusters');
+                    clustersDiv.innerHTML = data.cluster_explanations.map(cluster => `
+                        <div class="border rounded-lg p-6 mb-4 hover:shadow-lg transition-shadow">
+                            <h3 class="text-xl font-semibold text-green-800 mb-2">${cluster.title}</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <p class="font-medium text-gray-700">หัวข้อหลัก:</p>
+                                    <p class="text-gray-600">${cluster.main_focus}</p>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-gray-700">คำอธิบาย:</p>
+                                    <p class="text-gray-600">${cluster.explanation}</p>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-gray-700">การนำไปใช้:</p>
+                                    <p class="text-gray-600">${cluster.practical_use}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
 
                 const pollInterval = setInterval(async () => {
                     try {
@@ -1325,6 +1357,61 @@
 
         // Similarly modify other loading functions to support translation
         // Add translation support to other dynamic content loading functions as needed
+
+        // Add new function to load disease solutions
+        async function loadDiseaseSolutions() {
+            try {
+                const response = await fetch(`${API_URL}/disease-solutions`);
+                const solutions = await response.json();
+                
+                const solutionsDiv = document.getElementById('diseaseSolutions');
+                solutionsDiv.innerHTML = Object.entries(solutions).map(([disease, info]) => `
+                    <div class="border rounded-lg p-6 hover:shadow-lg transition-shadow bg-white">
+                        <h3 class="text-xl font-semibold text-green-800 mb-4">${disease}</h3>
+                        
+                        <div class="mb-4">
+                            <h4 class="font-medium text-gray-700 mb-2">อาการ:</h4>
+                            <p class="text-gray-600 bg-gray-50 p-3 rounded">${info.symptoms}</p>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <h4 class="font-medium text-gray-700 mb-2">วิธีการรักษา:</h4>
+                            <ul class="list-none space-y-2">
+                                ${info.solutions.map(solution => `
+                                    <li class="flex items-start">
+                                        <span class="text-green-600 mr-2">•</span>
+                                        <span class="text-gray-600">${solution}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-2">การป้องกัน:</h4>
+                            <ul class="list-none space-y-2">
+                                ${info.prevention.map(prevention => `
+                                    <li class="flex items-start">
+                                        <span class="text-green-600 mr-2">•</span>
+                                        <span class="text-gray-600">${prevention}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading disease solutions:', error);
+                document.getElementById('diseaseSolutions').innerHTML = 
+                    '<p class="text-center text-red-500">Error loading disease solutions. Please try again later.</p>';
+            }
+        }
+
+        // Add loadDiseaseSolutions to initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            loadArticles();
+            loadNews();
+            loadDiseaseSolutions();  // Add this line
+        });
     </script>
 </body>
 

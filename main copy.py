@@ -108,6 +108,7 @@ class PubMedQuery(BaseModel):
 
 class AnalysisResponse(BaseModel):
     message: str
+    cluster_explanations: Optional[List[dict]] = None
 
 class ClusterInfo(BaseModel):
     cluster_number: int
@@ -371,8 +372,33 @@ def analyze_data(query: PubMedQuery, background_tasks: BackgroundTasks):
     Initiate the analysis process with the given PubMed query.
     The processing is done in the background.
     """
+    # Get cluster terms from existing data if available
+    cluster_terms = []
+    try:
+        df = pd.read_csv("rice_disease_analysis/rice_disease_pubmed_data.csv")
+        processed_abstracts = df['Processed_Abstract'].tolist()
+        X, vectorizer, feature_names = vectorize_text(processed_abstracts)
+        optimal_k = df['Cluster'].nunique()
+        
+        for cluster in range(optimal_k):
+            cluster_features = X[df['Cluster'] == cluster].toarray()
+            if cluster_features.size > 0:
+                avg_features = np.mean(cluster_features, axis=0)
+                top_terms = [feature_names[i] for i in np.argsort(avg_features)[-10:]]
+                cluster_terms.append(top_terms)
+    except:
+        pass
+    
+    # Get human-friendly explanations
+    explanations = get_human_friendly_cluster_explanations(cluster_terms) if cluster_terms else None
+    
+    # Start the background task
     background_tasks.add_task(process_data, query.query, query.max_results)
-    return {"message": "Analysis started. Please check the results after completion."}
+    
+    return {
+        "message": "Analysis started. Please check the results after completion.",
+        "cluster_explanations": explanations
+    }
 
 def process_data(query: str, max_results: int):
     logging.info("Starting data processing...")
@@ -1191,3 +1217,163 @@ async def translate_bulk(request: BulkTranslationRequest):
             status_code=500,
             detail=f"Bulk translation error: {str(e)}"
         )
+
+def get_human_friendly_cluster_explanations(cluster_terms: List[List[str]]) -> List[dict]:
+    """
+    Generate human-friendly explanations for each cluster based on their top terms.
+    """
+    explanations = []
+    
+    for idx, terms in enumerate(cluster_terms):
+        explanation = {
+            "cluster_number": idx,
+            "title": "",
+            "main_focus": "",
+            "explanation": "",
+            "practical_use": ""
+        }
+        
+        # Analyze terms to determine cluster focus
+        terms_str = " ".join(terms)
+        
+        if any(term in terms_str for term in ["gene", "resistance", "variety", "breeding"]):
+            explanation.update({
+                "title": "Rice Plant Protection and Breeding",
+                "main_focus": "Development of disease-resistant rice varieties through genetic research",
+                "explanation": "This group focuses on creating stronger rice varieties that can naturally resist diseases. "
+                              "It includes research on protective genes and breeding techniques.",
+                "practical_use": "Helps farmers choose better rice varieties that are less likely to get diseases."
+            })
+        elif any(term in terms_str for term in ["oswrky", "defense", "expression", "pathogen"]):
+            explanation.update({
+                "title": "Plant Defense Systems",
+                "main_focus": "Understanding how rice plants defend against diseases",
+                "explanation": "This research looks at how rice plants fight off diseases naturally, "
+                              "especially focusing on defense genes and immune responses.",
+                "practical_use": "Helps develop better ways to boost rice plants' natural protection systems."
+            })
+        elif any(term in terms_str for term in ["protein", "blast", "oryzae", "pathogen"]):
+            explanation.update({
+                "title": "Disease and Rice Interaction",
+                "main_focus": "Study of how diseases attack rice plants",
+                "explanation": "This research examines how diseases infect rice plants and what happens during infection. "
+                              "It helps understand the disease process better.",
+                "practical_use": "Helps predict and prevent disease outbreaks more effectively."
+            })
+        elif any(term in terms_str for term in ["model", "growth", "disease", "development"]):
+            explanation.update({
+                "title": "Disease Patterns and Growth Impact",
+                "main_focus": "How diseases affect rice growth and spread",
+                "explanation": "This research tracks disease spread patterns and their effects on rice plant growth. "
+                              "It includes prediction models and growth analysis.",
+                "practical_use": "Helps farmers understand how diseases might spread and affect their crops."
+            })
+        elif any(term in terms_str for term in ["leaf", "plant", "expression", "activity"]):
+            explanation.update({
+                "title": "Plant Response and Treatment",
+                "main_focus": "Identifying disease symptoms and treatments",
+                "explanation": "This research focuses on how rice plants show signs of disease and possible treatments. "
+                              "It includes studying leaf symptoms and plant responses.",
+                "practical_use": "Helps farmers identify diseases early and choose the right treatments."
+            })
+        else:
+            explanation.update({
+                "title": f"Research Cluster {idx}",
+                "main_focus": "General rice disease research",
+                "explanation": "This group contains various studies about rice diseases and their management.",
+                "practical_use": "Provides general knowledge about rice disease management."
+            })
+            
+        explanations.append(explanation)
+    
+    return explanations
+
+def get_disease_solutions() -> dict:
+    """
+    Provides practical solutions and treatments for common rice diseases.
+    """
+    return {
+        "โรคไหม้": {
+            "symptoms": "ใบมีจุดสีน้ำตาลคล้าย รูปตา มีขอบสีน้ำตาลเข้ม ตรงกลางสีเทา",
+            "solutions": [
+                "1. ใช้พันธุ์ข้าวต้านทานโรค เช่น กข6, กข15, สุพรรณบุรี1",
+                "2. คลุกเมล็ดพันธุ์ด้วยสารป้องกันกำจัดเชื้อรา",
+                "3. แบ่งใส่ปุ๋ยไนโตรเจน 3 ครั้ง",
+                "4. กำจัดวัชพืชในนาข้าว",
+                "5. ฉีดพ่นสารป้องกันกำจัดเชื้อราเมื่อพบโรคระบาด"
+            ],
+            "prevention": [
+                "1. ไม่ควรปลูกข้าวแน่นเกินไป",
+                "2. หลีกเลี่ยงการใส่ปุ๋ยไนโตรเจนมากเกินไป",
+                "3. กำจัดข้าวเรื้อและพืชอาศัย",
+                "4. ตรวจแปลงนาอย่างสม่ำเสมอ"
+            ]
+        },
+        "โรคขอบใบแห้ง": {
+            "symptoms": "ใบมีสีเหลืองและแห้งตายจากขอบใบ มีหยดน้ำเล็กๆ สีขาวขุ่นบริเวณขอบใบ",
+            "solutions": [
+                "1. ใช้เมล็ดพันธุ์ปลอดโรค",
+                "2. ลดการใส่ปุ๋ยไนโตรเจน",
+                "3. ระบายน้ำในแปลงนาให้ทั่วถึง",
+                "4. พ่นสารเคมีป้องกันกำจัดเชื้อแบคทีเรียตามคำแนะนำ"
+            ],
+            "prevention": [
+                "1. ไม่ใช้ปุ๋ยไนโตรเจนมากเกินไป",
+                "2. รักษาระดับน้ำในนาให้เหมาะสม",
+                "3. กำจัดวัชพืชและพืชอาศัย",
+                "4. เก็บเกี่ยวในระยะพลับพลึง"
+            ]
+        },
+        "โรคใบจุดสีน้ำตาล": {
+            "symptoms": "จุดสีน้ำตาลเล็กๆ กระจายทั่วใบ รูปร่างกลมหรือรี",
+            "solutions": [
+                "1. ใช้พันธุ์ต้านทาน",
+                "2. ปรับปรุงดินด้วยการใส่ปูนขาว",
+                "3. ใส่ปุ๋ยโพแทสเซียมเพื่อเพิ่มความต้านทาน",
+                "4. ฉีดพ่นสารป้องกันกำจัดเชื้อราตามความจำเป็น"
+            ],
+            "prevention": [
+                "1. ไม่ปลูกข้าวแน่นเกินไป",
+                "2. รักษาความสมดุลของธาตุอาหาร",
+                "3. กำจัดวัชพืชในนาข้าว",
+                "4. ตากดินและไถกลบตอซัง"
+            ]
+        },
+        "โรคกาบใบแห้ง": {
+            "symptoms": "แผลสีน้ำตาลแดงที่กาบใบ มีขอบแผลสีน้ำตาลเข้ม",
+            "solutions": [
+                "1. ลดความหนาแน่นของการปลูก",
+                "2. ควบคุมระดับน้ำในนาให้เหมาะสม",
+                "3. ใส่ปุ๋ยให้สมดุล",
+                "4. ฉีดพ่นสารป้องกันกำจัดเชื้อราในระยะกำเนิดช่อดอก"
+            ],
+            "prevention": [
+                "1. ใช้เมล็ดพันธุ์สะอาด",
+                "2. ไม่ใส่ปุ๋ยไนโตรเจนมากเกินไป",
+                "3. กำจัดวัชพืชในแปลงนา",
+                "4. เก็บเกี่ยวในระยะที่เหมาะสม"
+            ]
+        },
+        "โรคเมล็ดด่าง": {
+            "symptoms": "เมล็ดมีจุดสีน้ำตาลหรือดำ เมล็ดลีบ คุณภาพต่ำ",
+            "solutions": [
+                "1. ใช้เมล็ดพันธุ์สะอาด",
+                "2. พ่นสารป้องกันกำจัดเชื้อราในระยะออกดอก",
+                "3. เก็บเกี่ยวเมื่อข้าวแก่พอดี",
+                "4. ทำความสะอาดเมล็ดพันธุ์ก่อนเก็บรักษา"
+            ],
+            "prevention": [
+                "1. หลีกเลี่ยงการปลูกข้าวในช่วงที่มีฝนชุก",
+                "2. ควบคุมความชื้นในแปลงนา",
+                "3. กำจัดวัชพืชที่เป็นพืชอาศัย",
+                "4. ตากเมล็ดให้แห้งดีก่อนเก็บรักษา"
+            ]
+        }
+    }
+
+@app.get("/disease-solutions")
+def get_disease_treatment_methods():
+    """
+    Get practical solutions for different rice diseases.
+    """
+    return get_disease_solutions()

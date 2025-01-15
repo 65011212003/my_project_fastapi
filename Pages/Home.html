@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>หน้าหลัก - ระบบวิเคราะห์โรคข้าว</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@4.24.15/dist/antd.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/antd@4.24.15/dist/antd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ant-design/icons@4.8.0/dist/index.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/flag-icon-css@3.5.0/css/flag-icon.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+
+<body class="min-h-screen py-8">
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 bg-white shadow-md z-50">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <h1 class="text-xl font-bold text-green-800">ระบบวิเคราะห์โรคข้าว</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="Home.html" class="nav-link active">หน้าหลัก</a>
+                    <a href="Analysis.html" class="nav-link">การวิเคราะห์</a>
+                    <a href="Solutions.html" class="nav-link">วิธีการรักษา</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 mt-20">
+        <div class="gradient-header mb-8">
+            <h1 class="text-4xl font-bold text-center">ยินดีต้อนรับสู่ระบบวิเคราะห์โรคข้าว</h1>
+            <p class="text-center mt-2 text-gray-100">เครื่องมือวิเคราะห์งานวิจัยโรคข้าวขั้นสูง</p>
+        </div>
+
+        <!-- Statistics Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">การกระจายของโรค</h2>
+                <canvas id="diseaseChart"></canvas>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">แนวโน้มรายปี</h2>
+                <canvas id="yearlyChart"></canvas>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-green-800">คำสำคัญยอดนิยม</h2>
+                <div id="keywordCloud" class="flex flex-wrap gap-2"></div>
+            </div>
+        </div>
+
+        <!-- News Section -->
+        <div class="card p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">ข่าวสารโรคข้าวล่าสุด</h2>
+            <div id="newsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- News articles will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Status Card -->
+        <div class="card p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4 text-green-800">สถานะระบบ</h2>
+            <div id="status" class="text-gray-700"></div>
+        </div>
+    </div>
+
+    <!-- Language Selector -->
+    <div class="language-selector">
+        <button onclick="changeLanguage('th')" class="language-btn active" id="lang-th">
+            <span class="flag-icon flag-icon-th"></span> ไทย
+        </button>
+        <button onclick="changeLanguage('en')" class="language-btn" id="lang-en">
+            <span class="flag-icon flag-icon-gb"></span> English
+        </button>
+        <button onclick="changeLanguage('zh')" class="language-btn" id="lang-zh">
+            <span class="flag-icon flag-icon-cn"></span> 中文
+        </button>
+    </div>
+
+    <script src="../scripts/common.js"></script>
+    <script src="../scripts/home.js"></script>
+</body>
+</html> 

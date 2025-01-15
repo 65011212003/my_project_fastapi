@@ -99,9 +99,9 @@ app.add_middleware(
 )
 
 
-# -----------------------------------
+# ----------------------------------
 # Pydantic Models
-# -----------------------------------
+# ----------------------------------
 class PubMedQuery(BaseModel):
     query: str
     max_results: Optional[int] = 10000

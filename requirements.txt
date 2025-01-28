@@ -12,3 +12,4 @@ seaborn
 python-dotenv
 googletrans==3.1.0a0
 aiohttp
+openpyxl

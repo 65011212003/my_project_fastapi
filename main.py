@@ -48,7 +48,7 @@ import aiohttp
 
 import random
 
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
 # -----------------------------------
 # Setup Logging
@@ -99,16 +99,15 @@ app.add_middleware(
 )
 
 
-# ----------------------------------
+# -----------------------------------
 # Pydantic Models
-# ----------------------------------
+# -----------------------------------
 class PubMedQuery(BaseModel):
     query: str
     max_results: Optional[int] = 10000
 
 class AnalysisResponse(BaseModel):
     message: str
-    cluster_explanations: Optional[List[dict]] = None
 
 class ClusterInfo(BaseModel):
     cluster_number: int
@@ -217,21 +216,33 @@ def preprocess_text(text: str) -> str:
 
     return preprocessed
 
-def extract_entities_simple(text: str) -> dict:
+def extract_entities(text: str) -> dict:
     """
-    Extract entities like diseases, symptoms, treatments from text using simple heuristics.
+    Extract entities from text using spaCy patterns and rules.
     """
+    patterns = {
+        "DISEASE": [
+            ["disease", "infection", "virus", "fungus"],
+            ["ADJ", "NOUN"]
+        ],
+        "SYMPTOM": [
+            ["symptom", "effect", "spot", "lesion"],
+            ["NOUN"]
+        ]
+    }
+    
     doc = nlp(text)
-    entities = {"Disease": [], "Treatment": [], "Symptom": []}
-    for chunk in doc.noun_chunks:
-        # Simple heuristic rules
-        if any(word in chunk.text.lower() for word in ["disease", "virus", "fungus"]):
-            entities["Disease"].append(chunk.text)
-        if any(word in chunk.text.lower() for word in ["treatment", "method", "management"]):
-            entities["Treatment"].append(chunk.text)
-        if any(word in chunk.text.lower() for word in ["effect", "impact", "symptom"]):
-            entities["Symptom"].append(chunk.text)
-    return entities
+    ruler = nlp.add_pipe("entity_ruler", config={"phrase_matcher_attr": "LOWER"})
+    
+    for label, (keywords, pos) in patterns.items():
+        patterns = [{"label": label, "pattern": [{"LOWER": {"IN": keywords}, "POS": {"IN": pos}}]}]
+        ruler.add_patterns(patterns)
+    
+    entities = defaultdict(list)
+    for ent in doc.ents:
+        entities[ent.label_].append(ent.text)
+    
+    return dict(entities)
 
 def search_pubmed(query: str, max_results: int = 1000) -> List[str]:
     """
@@ -307,29 +318,27 @@ def vectorize_text(processed_texts: List[str], max_features: int = 5000):
 
 def determine_optimal_clusters(X, k_min=2, k_max=15):
     """
-    Determine the optimal number of clusters using Elbow Method and Silhouette Score.
-    Returns the optimal k value along with metrics for visualization.
+    Determine the optimal number of clusters using Silhouette Score.
     """
-    sse = []
+    best_k = k_min
+    best_score = -1
     silhouette_scores = []
-    k_range = range(k_min, k_max)
     
-    for k in k_range:
+    for k in range(k_min, k_max+1):
         km = KMeans(n_clusters=k, random_state=42)
-        km.fit(X)
-        sse.append(km.inertia_)
-        silhouette_avg = silhouette_score(X, km.labels_)
-        silhouette_scores.append(silhouette_avg)
-        logging.info(f"Cluster {k}, SSE: {km.inertia_}, Silhouette Score: {silhouette_avg:.4f}")
-    
-    # Find optimal k using silhouette score
-    best_k = max(
-        zip(k_range, silhouette_scores),
-        key=lambda x: x[1]
-    )[0]
-    
-    logging.info(f"Selected optimal number of clusters: {best_k}")
-    return k_range, sse, silhouette_scores, best_k
+        labels = km.fit_predict(X)
+        if len(set(labels)) < 2:
+            continue  # Skip if only 1 cluster
+            
+        score = silhouette_score(X, labels)
+        silhouette_scores.append(score)
+        
+        if score > best_score:
+            best_score = score
+            best_k = k
+            
+    logging.info(f"Optimal clusters: {best_k} with score {best_score:.2f}")
+    return best_k, silhouette_scores
 
 def perform_kmeans(X, n_clusters=5):
     """
@@ -372,33 +381,8 @@ def analyze_data(query: PubMedQuery, background_tasks: BackgroundTasks):
     Initiate the analysis process with the given PubMed query.
     The processing is done in the background.
     """
-    # Get cluster terms from existing data if available
-    cluster_terms = []
-    try:
-        df = pd.read_csv("rice_disease_analysis/rice_disease_pubmed_data.csv")
-        processed_abstracts = df['Processed_Abstract'].tolist()
-        X, vectorizer, feature_names = vectorize_text(processed_abstracts)
-        optimal_k = df['Cluster'].nunique()
-        
-        for cluster in range(optimal_k):
-            cluster_features = X[df['Cluster'] == cluster].toarray()
-            if cluster_features.size > 0:
-                avg_features = np.mean(cluster_features, axis=0)
-                top_terms = [feature_names[i] for i in np.argsort(avg_features)[-10:]]
-                cluster_terms.append(top_terms)
-    except:
-        pass
-    
-    # Get human-friendly explanations
-    explanations = get_human_friendly_cluster_explanations(cluster_terms) if cluster_terms else None
-    
-    # Start the background task
     background_tasks.add_task(process_data, query.query, query.max_results)
-    
-    return {
-        "message": "Analysis started. Please check the results after completion.",
-        "cluster_explanations": explanations
-    }
+    return {"message": "Analysis started. Please check the results after completion."}
 
 def process_data(query: str, max_results: int):
     logging.info("Starting data processing...")
@@ -446,39 +430,24 @@ def process_data(query: str, max_results: int):
     logging.info("Vectorization successful.")
 
     # 4. Determine Optimal Number of Clusters
-    k_range, sse, silhouette_scores, optimal_k = determine_optimal_clusters(X)
-    
-    # Plot Elbow and Silhouette Scores
-    plt.figure(figsize=(14,6))
+    optimal_k, silhouette_scores = determine_optimal_clusters(X)
+    logging.info(f"Clustering into {optimal_k} clusters using K-Means.")
+    kmeans, clusters = perform_kmeans(X, n_clusters=optimal_k)
+    df['Cluster'] = clusters
 
-    plt.subplot(1, 2, 1)
-    plt.plot(k_range, sse, marker='o')
-    plt.axvline(x=optimal_k, color='r', linestyle='--', label=f'Optimal k={optimal_k}')
-    plt.xlabel("Number of Clusters")
-    plt.ylabel("Sum of Squared Distances (SSE)")
-    plt.title("Elbow Method For Optimal k")
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(k_range, silhouette_scores, marker='o', color='orange')
-    plt.axvline(x=optimal_k, color='r', linestyle='--', label=f'Optimal k={optimal_k}')
+    # Plot Silhouette Scores
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(2, len(silhouette_scores) + 2), silhouette_scores, marker='o')
     plt.xlabel("Number of Clusters")
     plt.ylabel("Silhouette Score")
     plt.title("Silhouette Scores For Various k")
-    plt.legend()
-
-    plt.tight_layout()
     plot_path = os.path.join(output_dir, "clustering_plots.png")
     plt.savefig(plot_path)
     plt.close()
     logging.info(f"Clustering plots saved to {plot_path}.")
 
-    logging.info(f"Clustering into {optimal_k} clusters using K-Means.")
-    kmeans, clusters = perform_kmeans(X, n_clusters=optimal_k)
-    df['Cluster'] = clusters
-
     # 5. Entity Extraction
-    df['Entities'] = df['Processed_Abstract'].apply(extract_entities_simple)
+    df['Entities'] = df['Abstract'].apply(extract_entities)
 
     # 6. Topic Modeling with LDA
     tokenized_docs = df['Processed_Abstract'].tolist()
@@ -1107,23 +1076,19 @@ translator = None
 
 def get_translator():
     """Get or initialize the translator."""
-    global translator
-    if translator is None:
-        try:
-            translator = Translator(service_urls=['translate.google.com'])
-            return translator
-        except Exception as e:
-            logging.error(f"Error initializing translator: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to initialize translator"
-            )
-    return translator
+    try:
+        return GoogleTranslator()
+    except Exception as e:
+        logging.error(f"Error initializing translator: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to initialize translator"
+        )
 
 @app.post("/translate")
 async def translate_text(request: TranslationRequest):
     """
-    Translate text to the target language using googletrans.
+    Translate text to the target language using deep-translator.
     """
     try:
         if not request.text or not request.text.strip():
@@ -1132,83 +1097,56 @@ async def translate_text(request: TranslationRequest):
                 "source_language": "auto"
             }
 
-        trans = get_translator()
-        logging.info(f"Translating text to {request.target_language}: {request.text[:100]}...")
-        
-        result = trans.translate(
+        translator = get_translator()
+        result = translator.translate(
             text=request.text,
-            dest=request.target_language
+            target=request.target_language
         )
         
         return {
-            "translated_text": result.text,
-            "source_language": result.src
+            "translated_text": result,
+            "source_language": translator.source
         }
     except Exception as e:
         logging.error(f"Translation error: {str(e)}")
-        try:
-            # Try reinitializing translator
-            global translator
-            translator = Translator(service_urls=['translate.google.com'])
-            result = translator.translate(
-                text=request.text,
-                dest=request.target_language
-            )
-            return {
-                "translated_text": result.text,
-                "source_language": result.src
-            }
-        except Exception as e:
-            logging.error(f"Translation retry failed: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Translation error: {str(e)}"
-            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Translation error: {str(e)}"
+        )
 
 @app.post("/translate-bulk")
 async def translate_bulk(request: BulkTranslationRequest):
     """
-    Translate multiple texts to the target language using googletrans.
+    Translate multiple texts to the target language using deep-translator.
     """
     try:
         if not request.texts:
             return {"translations": []}
 
-        # Filter out empty texts
         texts_to_translate = [text for text in request.texts if text and text.strip()]
         if not texts_to_translate:
             return {"translations": []}
 
-        trans = get_translator()
+        translator = get_translator()
         translations = []
         
-        # Translate texts in smaller batches
-        batch_size = 5
-        for i in range(0, len(texts_to_translate), batch_size):
-            batch = texts_to_translate[i:i + batch_size]
+        for text in texts_to_translate:
             try:
-                for text in batch:
-                    result = trans.translate(
-                        text=text,
-                        dest=request.target_language
-                    )
-                    translations.append({
-                        "translated_text": result.text,
-                        "source_language": result.src
-                    })
+                result = translator.translate(
+                    text=text,
+                    target=request.target_language
+                )
+                translations.append({
+                    "translated_text": result,
+                    "source_language": translator.source
+                })
             except Exception as e:
-                logging.error(f"Error translating batch {i//batch_size + 1}: {str(e)}")
-                # Try reinitializing translator for this batch
-                translator = Translator(service_urls=['translate.google.com'])
-                for text in batch:
-                    result = translator.translate(
-                        text=text,
-                        dest=request.target_language
-                    )
-                    translations.append({
-                        "translated_text": result.text,
-                        "source_language": result.src
-                    })
+                logging.error(f"Error translating text: {str(e)}")
+                translations.append({
+                    "translated_text": text,
+                    "source_language": "auto",
+                    "error": str(e)
+                })
 
         return {"translations": translations}
     except Exception as e:
@@ -1218,162 +1156,7 @@ async def translate_bulk(request: BulkTranslationRequest):
             detail=f"Bulk translation error: {str(e)}"
         )
 
-def get_human_friendly_cluster_explanations(cluster_terms: List[List[str]]) -> List[dict]:
-    """
-    Generate human-friendly explanations for each cluster based on their top terms.
-    """
-    explanations = []
-    
-    for idx, terms in enumerate(cluster_terms):
-        explanation = {
-            "cluster_number": idx,
-            "title": "",
-            "main_focus": "",
-            "explanation": "",
-            "practical_use": ""
-        }
-        
-        # Analyze terms to determine cluster focus
-        terms_str = " ".join(terms)
-        
-        if any(term in terms_str for term in ["gene", "resistance", "variety", "breeding"]):
-            explanation.update({
-                "title": "Rice Plant Protection and Breeding",
-                "main_focus": "Development of disease-resistant rice varieties through genetic research",
-                "explanation": "This group focuses on creating stronger rice varieties that can naturally resist diseases. "
-                              "It includes research on protective genes and breeding techniques.",
-                "practical_use": "Helps farmers choose better rice varieties that are less likely to get diseases."
-            })
-        elif any(term in terms_str for term in ["oswrky", "defense", "expression", "pathogen"]):
-            explanation.update({
-                "title": "Plant Defense Systems",
-                "main_focus": "Understanding how rice plants defend against diseases",
-                "explanation": "This research looks at how rice plants fight off diseases naturally, "
-                              "especially focusing on defense genes and immune responses.",
-                "practical_use": "Helps develop better ways to boost rice plants' natural protection systems."
-            })
-        elif any(term in terms_str for term in ["protein", "blast", "oryzae", "pathogen"]):
-            explanation.update({
-                "title": "Disease and Rice Interaction",
-                "main_focus": "Study of how diseases attack rice plants",
-                "explanation": "This research examines how diseases infect rice plants and what happens during infection. "
-                              "It helps understand the disease process better.",
-                "practical_use": "Helps predict and prevent disease outbreaks more effectively."
-            })
-        elif any(term in terms_str for term in ["model", "growth", "disease", "development"]):
-            explanation.update({
-                "title": "Disease Patterns and Growth Impact",
-                "main_focus": "How diseases affect rice growth and spread",
-                "explanation": "This research tracks disease spread patterns and their effects on rice plant growth. "
-                              "It includes prediction models and growth analysis.",
-                "practical_use": "Helps farmers understand how diseases might spread and affect their crops."
-            })
-        elif any(term in terms_str for term in ["leaf", "plant", "expression", "activity"]):
-            explanation.update({
-                "title": "Plant Response and Treatment",
-                "main_focus": "Identifying disease symptoms and treatments",
-                "explanation": "This research focuses on how rice plants show signs of disease and possible treatments. "
-                              "It includes studying leaf symptoms and plant responses.",
-                "practical_use": "Helps farmers identify diseases early and choose the right treatments."
-            })
-        else:
-            explanation.update({
-                "title": f"Research Cluster {idx}",
-                "main_focus": "General rice disease research",
-                "explanation": "This group contains various studies about rice diseases and their management.",
-                "practical_use": "Provides general knowledge about rice disease management."
-            })
-            
-        explanations.append(explanation)
-    
-    return explanations
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
-def get_disease_solutions() -> dict:
-    """
-    Provides practical solutions and treatments for common rice diseases.
-    """
-    return {
-        "โรคไหม้": {
-            "symptoms": "ใบมีจุดสีน้ำตาลคล้าย รูปตา มีขอบสีน้ำตาลเข้ม ตรงกลางสีเทา",
-            "solutions": [
-                "1. ใช้พันธุ์ข้าวต้านทานโรค เช่น กข6, กข15, สุพรรณบุรี1",
-                "2. คลุกเมล็ดพันธุ์ด้วยสารป้องกันกำจัดเชื้อรา",
-                "3. แบ่งใส่ปุ๋ยไนโตรเจน 3 ครั้ง",
-                "4. กำจัดวัชพืชในนาข้าว",
-                "5. ฉีดพ่นสารป้องกันกำจัดเชื้อราเมื่อพบโรคระบาด"
-            ],
-            "prevention": [
-                "1. ไม่ควรปลูกข้าวแน่นเกินไป",
-                "2. หลีกเลี่ยงการใส่ปุ๋ยไนโตรเจนมากเกินไป",
-                "3. กำจัดข้าวเรื้อและพืชอาศัย",
-                "4. ตรวจแปลงนาอย่างสม่ำเสมอ"
-            ]
-        },
-        "โรคขอบใบแห้ง": {
-            "symptoms": "ใบมีสีเหลืองและแห้งตายจากขอบใบ มีหยดน้ำเล็กๆ สีขาวขุ่นบริเวณขอบใบ",
-            "solutions": [
-                "1. ใช้เมล็ดพันธุ์ปลอดโรค",
-                "2. ลดการใส่ปุ๋ยไนโตรเจน",
-                "3. ระบายน้ำในแปลงนาให้ทั่วถึง",
-                "4. พ่นสารเคมีป้องกันกำจัดเชื้อแบคทีเรียตามคำแนะนำ"
-            ],
-            "prevention": [
-                "1. ไม่ใช้ปุ๋ยไนโตรเจนมากเกินไป",
-                "2. รักษาระดับน้ำในนาให้เหมาะสม",
-                "3. กำจัดวัชพืชและพืชอาศัย",
-                "4. เก็บเกี่ยวในระยะพลับพลึง"
-            ]
-        },
-        "โรคใบจุดสีน้ำตาล": {
-            "symptoms": "จุดสีน้ำตาลเล็กๆ กระจายทั่วใบ รูปร่างกลมหรือรี",
-            "solutions": [
-                "1. ใช้พันธุ์ต้านทาน",
-                "2. ปรับปรุงดินด้วยการใส่ปูนขาว",
-                "3. ใส่ปุ๋ยโพแทสเซียมเพื่อเพิ่มความต้านทาน",
-                "4. ฉีดพ่นสารป้องกันกำจัดเชื้อราตามความจำเป็น"
-            ],
-            "prevention": [
-                "1. ไม่ปลูกข้าวแน่นเกินไป",
-                "2. รักษาความสมดุลของธาตุอาหาร",
-                "3. กำจัดวัชพืชในนาข้าว",
-                "4. ตากดินและไถกลบตอซัง"
-            ]
-        },
-        "โรคกาบใบแห้ง": {
-            "symptoms": "แผลสีน้ำตาลแดงที่กาบใบ มีขอบแผลสีน้ำตาลเข้ม",
-            "solutions": [
-                "1. ลดความหนาแน่นของการปลูก",
-                "2. ควบคุมระดับน้ำในนาให้เหมาะสม",
-                "3. ใส่ปุ๋ยให้สมดุล",
-                "4. ฉีดพ่นสารป้องกันกำจัดเชื้อราในระยะกำเนิดช่อดอก"
-            ],
-            "prevention": [
-                "1. ใช้เมล็ดพันธุ์สะอาด",
-                "2. ไม่ใส่ปุ๋ยไนโตรเจนมากเกินไป",
-                "3. กำจัดวัชพืชในแปลงนา",
-                "4. เก็บเกี่ยวในระยะที่เหมาะสม"
-            ]
-        },
-        "โรคเมล็ดด่าง": {
-            "symptoms": "เมล็ดมีจุดสีน้ำตาลหรือดำ เมล็ดลีบ คุณภาพต่ำ",
-            "solutions": [
-                "1. ใช้เมล็ดพันธุ์สะอาด",
-                "2. พ่นสารป้องกันกำจัดเชื้อราในระยะออกดอก",
-                "3. เก็บเกี่ยวเมื่อข้าวแก่พอดี",
-                "4. ทำความสะอาดเมล็ดพันธุ์ก่อนเก็บรักษา"
-            ],
-            "prevention": [
-                "1. หลีกเลี่ยงการปลูกข้าวในช่วงที่มีฝนชุก",
-                "2. ควบคุมความชื้นในแปลงนา",
-                "3. กำจัดวัชพืชที่เป็นพืชอาศัย",
-                "4. ตากเมล็ดให้แห้งดีก่อนเก็บรักษา"
-            ]
-        }
-    }
-
-@app.get("/disease-solutions")
-def get_disease_treatment_methods():
-    """
-    Get practical solutions for different rice diseases.
-    """
-    return get_disease_solutions()

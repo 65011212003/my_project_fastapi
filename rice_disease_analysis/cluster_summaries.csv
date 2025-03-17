@@ -1,0 +1,3 @@
+cluster,size,common_diseases,common_treatments,common_symptoms,common_effects
+0,718,"{'brown spot': 3, 'bacterial blight': 2, 'Rice blast': 1, 'rice blast': 1, 'Rice yellow mottle virus': 1}",{'pesticide': 1},"{'lesions': 12, 'necrosis': 5, 'leaf blight': 1, 'Necrosis': 1}",
+1,1234,"{'rice blast': 186, 'stem rot': 102, 'bacterial blight': 93, 'sheath blight': 64, 'Rice blast': 56}","{'biocontrol': 49, 'fungicide': 48, 'pesticide': 32, 'resistant varieties': 22, 'biological control': 22}","{'lesions': 55, 'leaf blight': 52, 'necrosis': 23, 'wilting': 19, 'leaf streak': 18}","{'growth inhibition': 11, 'yield loss': 11, 'economic loss': 2, 'crop damage': 2, 'Growth inhibition': 1}"

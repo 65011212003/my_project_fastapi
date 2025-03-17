@@ -1,15 +1,33 @@
-fastapi
-uvicorn[standard]
-biopython
-pandas
-numpy
-scikit-learn
-nltk
-spacy
-gensim
-matplotlib
-seaborn
-python-dotenv
-googletrans==3.1.0a0
-aiohttp
-openpyxl
+# Core dependencies
+fastapi>=0.95.0
+uvicorn>=0.21.1
+pydantic>=1.10.7
+pandas>=1.5.3
+numpy>=1.24.2
+matplotlib>=3.7.1
+seaborn>=0.12.2
+
+# NLP and ML libraries
+nltk>=3.8.1
+spacy>=3.5.1
+scikit-learn>=1.2.2
+gensim>=4.3.1
+beautifulsoup4>=4.12.0
+lxml>=4.9.2
+
+# Bio libraries
+biopython>=1.81
+
+# Advanced model dependencies (optional)
+transformers>=4.28.1
+torch>=2.0.0
+sentence-transformers>=2.2.2
+umap-learn>=0.5.3
+
+# Utilities
+aiohttp>=3.8.4
+deep-translator>=1.11.1
+python-multipart>=0.0.6
+
+# Download spaCy model
+# python -m spacy download en_core_web_sm
